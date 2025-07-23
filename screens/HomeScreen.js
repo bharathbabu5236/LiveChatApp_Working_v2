@@ -22,14 +22,14 @@ const HomeScreen = () => {
         <View style={styles.container}>
             {/* Live Base Services Logo */}
             <Image
-                source={{ uri: 'https://placehold.co/300x150/007bff/ffffff?text=Live+Base+Services+Logo' }} // Placeholder logo URL
+                source={{ uri: 'https://placehold.co/300x150/007bff/ffffff?text=Live+Best+Service' }} // Placeholder logo URL
                 style={styles.logo}
                 resizeMode="contain" // Ensures the entire logo is visible within its bounds
                 onError={(error) => console.error('Image loading error:', error)}
                 onLoad={() => console.log('Logo loaded successfully')}
             />
 
-            <Text style={styles.title}>Live Best Services</Text>
+            <Text style={styles.title}>Live Best Service</Text>
             <Text style={styles.description}>
                 Welcome to Live Best Services! We are dedicated to providing you with top-notch healthcare support.
                 Our team is here to assist you with any queries or concerns you may have.

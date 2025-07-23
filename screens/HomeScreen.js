@@ -1,21 +1,28 @@
 // LiveChatApp/screens/HomeScreen.js
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons'; // For the chat icon
+import ChatPopup from './ChatPopup';
 
 const { width } = Dimensions.get('window'); // Get screen width for responsive image sizing
 
 const HomeScreen = () => {
     const navigation = useNavigation();
+    const [showChatPopup, setShowChatPopup] = useState(false);
 
     useEffect(() => {
         console.log('HomeScreen mounted');
     }, []);
 
     const handleChatPress = () => {
-        console.log('Chat button pressed, navigating to InitialChoice');
-        navigation.navigate('InitialChoice');
+        console.log('Chat button pressed, opening chat popup');
+        setShowChatPopup(true);
+    };
+
+    const handleAgentSelect = () => {
+        console.log('Agent selected, navigating to AgentStack');
+        navigation.navigate('AgentStack');
     };
 
     return (
@@ -42,6 +49,13 @@ const HomeScreen = () => {
             >
                 <MaterialIcons name="chat" size={30} color="white" />
             </TouchableOpacity>
+
+            {/* Chat Popup */}
+            <ChatPopup 
+                visible={showChatPopup} 
+                onClose={() => setShowChatPopup(false)} 
+                onAgentSelect={handleAgentSelect}
+            />
         </View>
     );
 };

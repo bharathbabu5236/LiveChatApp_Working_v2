@@ -11,7 +11,10 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const [userId, setUserId] = useState(null);
     const [chatId, setChatId] = useState(null);
     const [selectedDepartment, setSelectedDepartment] = useState(null);
+    const [selectedLanguage, setSelectedLanguage] = useState(null);
     const [userType, setUserType] = useState(null); // 'customer' or 'agent'
+    const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '' });
+    const [botStep, setBotStep] = useState('welcome'); // 'welcome', 'askName', 'askPhone', 'askLanguage', 'departmentSelection', 'chat'
     const [loadingChatSetup, setLoadingChatSetup] = useState(false);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
@@ -29,6 +32,9 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             setChatId(null);
             setUserId(null);
             setSelectedDepartment(null);
+            setSelectedLanguage(null);
+            setCustomerInfo({ name: '', phone: '' });
+            setBotStep('welcome');
         }
     }, [visible]);
 
@@ -39,12 +45,22 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             if (onAgentSelect) {
                 onAgentSelect();
             }
+        } else if (userType === 'customer') {
+            // Start bot flow for customer
+            setBotStep('askName');
+            // Add initial bot welcome message
+            setMessages([{
+                id: 'welcome-message',
+                senderType: 'bot',
+                text: 'Hello! Welcome to HealthBuddy. I\'m here to help you connect with our support team. To get started, could you please tell me your name?',
+                timestamp: new Date().toLocaleString(),
+            }]);
         }
     }, [userType, onClose, onAgentSelect]);
 
     useEffect(() => {
         const setupChat = async () => {
-            if (!selectedDepartment) return;
+            if (!selectedDepartment || !selectedLanguage) return;
             
             console.log("ChatPopup: Setting up chat...");
             setLoadingChatSetup(true);
@@ -91,6 +107,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                     where('userId', '==', currentUser.uid),
                     where('status', '==', 'open'),
                     where('assignedDepartment', '==', selectedDepartment),
+                    where('customerLanguage', '==', selectedLanguage),
                     orderBy('createdAt', 'desc')
                 );
 
@@ -99,7 +116,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                     const querySnapshot = await getDocs(q);
                     if (!querySnapshot.empty) {
                         foundChatId = querySnapshot.docs[0].id;
-                        console.log("ChatPopup: Found existing open chat for this user/department:", foundChatId);
+                        console.log("ChatPopup: Found existing open chat:", foundChatId);
                     }
                 } catch (error) {
                     console.error("ChatPopup: Error searching for existing chats:", error);
@@ -107,25 +124,25 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
 
                 if (foundChatId) {
                     setChatId(foundChatId);
-                    console.log("ChatPopup: Joined existing chat with ID:", foundChatId);
+                    console.log("ChatPopup: Joined existing chat:", foundChatId);
+                    setBotStep('chat');
                 } else {
-                    console.log("ChatPopup: No open chat found for this department, creating a new one...");
-                    if (!selectedDepartment) {
-                        console.warn("ChatPopup: No department selected, cannot create chat.");
-                        setLoadingChatSetup(false);
-                        return;
-                    }
-
+                    console.log("ChatPopup: Creating new chat...");
+                    
                     const newChatRef = await addDoc(chatsRef, {
                         userId: currentUser.uid,
                         agentId: assignedAgentId,
                         status: 'open',
                         assignedDepartment: selectedDepartment,
+                        customerLanguage: selectedLanguage,
+                        customerName: customerInfo.name,
+                        customerPhone: customerInfo.phone,
                         createdAt: serverTimestamp(),
                         lastMessageAt: serverTimestamp(),
                     });
                     setChatId(newChatRef.id);
-                    console.log("ChatPopup: Created new chat with ID:", newChatRef.id);
+                    console.log("ChatPopup: Created new chat:", newChatRef.id);
+                    setBotStep('chat');
                 }
             } else {
                 console.error("ChatPopup: User not authenticated after setup attempt.");
@@ -134,10 +151,10 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             setLoadingChatSetup(false);
         };
 
-        if (selectedDepartment) {
+        if (selectedDepartment && selectedLanguage) {
             setupChat();
         }
-    }, [selectedDepartment]);
+    }, [selectedDepartment, selectedLanguage]);
 
     useEffect(() => {
         if (chatId) {
@@ -153,6 +170,14 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                 }));
                 setMessages(loadedMessages);
                 console.log("ChatPopup: Messages loaded:", loadedMessages.length);
+                // Scroll to bottom when new messages arrive
+                if (flatListRef.current) {
+                    setTimeout(() => {
+                        if (flatListRef.current) {
+                            flatListRef.current.scrollTop = flatListRef.current.scrollHeight;
+                        }
+                    }, 100);
+                }
             }, (error) => {
                 console.error("ChatPopup: Error fetching messages:", error);
             });
@@ -169,18 +194,32 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
         console.log("ChatPopup: Input Text:", inputText.trim());
         console.log("ChatPopup: Current Chat ID:", chatId);
         console.log("ChatPopup: Current User ID:", userId);
+        console.log("ChatPopup: Selected Language:", selectedLanguage);
 
-        if (inputText.trim() === '' || !chatId || !userId) {
-            console.warn("ChatPopup: Cannot send message: Input empty, chatId or userId missing.");
+        if (inputText.trim() === '' || !chatId || !userId || !selectedLanguage) {
+            console.warn("ChatPopup: Cannot send message: Input empty, chatId, userId or selectedLanguage missing.");
             return;
         }
 
         try {
+            let translatedTextEn = inputText.trim();
+            let originalText = inputText.trim();
+
+            // If customer is using non-English, translate to English for agent
+            if (selectedLanguage !== 'en') {
+                console.log(`ChatPopup: Translating from ${selectedLanguage} to English...`);
+                // Here you would call your translation API
+                // For now, we'll use the original text
+                translatedTextEn = inputText.trim();
+            }
+
             const messagesRef = collection(db, `artifacts/${appId}/public/data/chats/${chatId}/messages`);
             await addDoc(messagesRef, {
                 senderId: userId,
                 senderType: 'user',
-                text: inputText,
+                originalText: originalText,
+                translatedTextEn: translatedTextEn,
+                language: selectedLanguage,
                 timestamp: serverTimestamp(),
             });
             setInputText('');
@@ -196,6 +235,74 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             console.error("ChatPopup: Error sending message:", error);
             Alert.alert("Error", "Failed to send message: " + error.message);
         }
+    };
+
+    const handleBotInput = () => {
+        if (inputText.trim() === '') return;
+
+        // Add user's bot input to messages for display
+        setMessages(prevMessages => [...prevMessages, {
+            id: Date.now().toString(),
+            senderType: 'user',
+            text: inputText.trim(),
+            timestamp: new Date().toLocaleString(),
+        }]);
+
+        if (botStep === 'askName') {
+            setCustomerInfo(prev => ({ ...prev, name: inputText.trim() }));
+            setBotStep('askPhone');
+            setInputText('');
+            // Simulate bot response
+            setTimeout(() => {
+                setMessages(prevMessages => [...prevMessages, {
+                    id: Date.now().toString() + 'bot',
+                    senderType: 'bot',
+                    text: `Nice to meet you, ${inputText.trim()}! What's your phone number?`,
+                    timestamp: new Date().toLocaleString(),
+                }]);
+            }, 500);
+        } else if (botStep === 'askPhone') {
+            setCustomerInfo(prev => ({ ...prev, phone: inputText.trim() }));
+            setBotStep('askLanguage');
+            setInputText('');
+            // Simulate bot response
+            setTimeout(() => {
+                setMessages(prevMessages => [...prevMessages, {
+                    id: Date.now().toString() + 'bot',
+                    senderType: 'bot',
+                    text: `Thank you! What's your preferred language for this chat?`,
+                    timestamp: new Date().toLocaleString(),
+                }]);
+            }, 500);
+        }
+    };
+
+    const handleKeyPress = (event) => {
+        // Handle Enter key (send message)
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            if (botStep === 'askName' || botStep === 'askPhone' || botStep === 'askLanguage') {
+                handleBotInput();
+            } else if (botStep === 'chat') {
+                handleSendMessage();
+            }
+        }
+        // Handle Shift+Enter (new line) - let it pass through naturally
+        // No need to prevent default for Shift+Enter as it should create a new line
+    };
+
+    const handleLanguageSelection = (language) => {
+        setSelectedLanguage(language);
+        setBotStep('departmentSelection');
+        // Add bot confirmation message
+        setTimeout(() => {
+            setMessages(prevMessages => [...prevMessages, {
+                id: Date.now().toString() + 'bot',
+                senderType: 'bot',
+                text: `Great! I'll connect you with an agent who speaks ${language === 'en' ? 'English' : 'Spanish'}. Now, please select a department:`,
+                timestamp: new Date().toLocaleString(),
+            }]);
+        }, 500);
     };
 
     const handleScrollToBottom = () => {
@@ -225,7 +332,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                         <MaterialIcons name="smart-toy" size={24} color="#3498db" />
                         <View style={styles.headerTextContainer}>
                             <Text style={styles.headerTitle}>Welcome to HealthBuddy</Text>
-                            <Text style={styles.headerSubtitle}>Our bot guide can help you through the process.</Text>
+                            <Text style={styles.headerSubtitle}>Our AI assistant can help you through the process.</Text>
                         </View>
                     </View>
                     <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -262,16 +369,16 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
         );
     }
 
-    // Department selection view (only for customers)
-    if (userType === 'customer' && !selectedDepartment) {
+    // Bot conversation views (for customers)
+    if (userType === 'customer' && (botStep === 'askName' || botStep === 'askPhone' || botStep === 'askLanguage')) {
         return (
             <View style={styles.popupContainer}>
                 <View style={styles.popupHeader}>
                     <View style={styles.headerContent}>
                         <MaterialIcons name="smart-toy" size={24} color="#3498db" />
                         <View style={styles.headerTextContainer}>
-                            <Text style={styles.headerTitle}>Welcome to HealthBuddy</Text>
-                            <Text style={styles.headerSubtitle}>Our bot guide can help you through the process.</Text>
+                            <Text style={styles.headerTitle}>AI Assistant</Text>
+                            <Text style={styles.headerSubtitle}>Collecting your information</Text>
                         </View>
                     </View>
                     <TouchableOpacity onPress={() => setUserType(null)} style={styles.backButton}>
@@ -283,8 +390,115 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                 </View>
                 
                 <View style={styles.popupBody}>
+                    <ScrollView 
+                        ref={flatListRef}
+                        style={styles.messagesWrapper}
+                        onScroll={handleScroll}
+                    >
+                        <View style={styles.messagesList}>
+                            {messages.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <Text style={styles.emptyStateText}>Starting conversation...</Text>
+                                </View>
+                            ) : (
+                                messages.map(message => (
+                                    <View key={message.id} style={[
+                                        styles.messageBubble,
+                                        message.senderType === 'user' ? styles.myMessage : styles.botMessage
+                                    ]}>
+                                        <Text style={styles.messageText}>{message.text}</Text>
+                                        <Text style={styles.messageTimestamp}>{message.timestamp}</Text>
+                                    </View>
+                                ))
+                            )}
+                        </View>
+                    </ScrollView>
+                    
+                    {botStep === 'askLanguage' && (
+                        <View style={styles.languageSelectionContainer}>
+                            <Text style={styles.languageSelectionText}>Select your preferred language:</Text>
+                            <TouchableOpacity
+                                style={styles.languageButton}
+                                onPress={() => handleLanguageSelection('en')}
+                            >
+                                <MaterialIcons name="language" size={20} color="white" />
+                                <Text style={styles.languageButtonText}>English</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.languageButton, styles.spanishButton]}
+                                onPress={() => handleLanguageSelection('es')}
+                            >
+                                <MaterialIcons name="language" size={20} color="white" />
+                                <Text style={styles.languageButtonText}>Español</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </View>
+                
+                {(botStep === 'askName' || botStep === 'askPhone') && (
+                    <View style={styles.inputContainer}>
+                        <TextInput
+                            style={styles.textInput}
+                            value={inputText}
+                            onChangeText={setInputText}
+                            placeholder={botStep === 'askName' ? "Enter your name..." : "Enter your phone number..."}
+                            multiline
+                            onKeyPress={handleKeyPress}
+                        />
+                        <TouchableOpacity style={styles.sendButton} onPress={handleBotInput}>
+                            <MaterialIcons name="send" size={16} color="white" />
+                        </TouchableOpacity>
+                    </View>
+                )}
+                
+                <View style={styles.popupFooter}>
+                    <Text style={styles.footerText}>Powered By AI</Text>
+                </View>
+            </View>
+        );
+    }
+
+    // Department selection view (for customers after bot conversation)
+    if (userType === 'customer' && botStep === 'departmentSelection' && !selectedDepartment) {
+        return (
+            <View style={styles.popupContainer}>
+                <View style={styles.popupHeader}>
+                    <View style={styles.headerContent}>
+                        <MaterialIcons name="smart-toy" size={24} color="#3498db" />
+                        <View style={styles.headerTextContainer}>
+                            <Text style={styles.headerTitle}>Welcome to HealthBuddy</Text>
+                            <Text style={styles.headerSubtitle}>Our AI assistant can help you through the process.</Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity onPress={() => setBotStep('askLanguage')} style={styles.backButton}>
+                        <MaterialIcons name="arrow-back" size={20} color="#666" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                        <MaterialIcons name="close" size={20} color="#666" />
+                    </TouchableOpacity>
+                </View>
+                
+                <View style={styles.popupBody}>
+                    <ScrollView 
+                        ref={flatListRef}
+                        style={styles.messagesWrapper}
+                        onScroll={handleScroll}
+                    >
+                        <View style={styles.messagesList}>
+                            {messages.map(message => (
+                                <View key={message.id} style={[
+                                    styles.messageBubble,
+                                    message.senderType === 'user' ? styles.myMessage : styles.botMessage
+                                ]}>
+                                    <Text style={styles.messageText}>{message.text}</Text>
+                                    <Text style={styles.messageTimestamp}>{message.timestamp}</Text>
+                                </View>
+                            ))}
+                        </View>
+                    </ScrollView>
+                    
                     <Text style={styles.instructionText}>
-                        Hi! Please select a department to start chatting with the next available agent.
+                        Hi {customerInfo.name}! Please select a department to start chatting with the next available agent.
                     </Text>
                     
                     <TouchableOpacity
@@ -311,6 +525,33 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
         );
     }
 
+    // Loading chat setup view
+    if (loadingChatSetup) {
+        return (
+            <View style={styles.popupContainer}>
+                <View style={styles.popupHeader}>
+                    <View style={styles.headerContent}>
+                        <MaterialIcons name="sync" size={24} color="#3498db" />
+                        <View style={styles.headerTextContainer}>
+                            <Text style={styles.headerTitle}>Connecting...</Text>
+                            <Text style={styles.headerSubtitle}>Setting up your chat</Text>
+                        </View>
+                    </View>
+                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                        <MaterialIcons name="close" size={20} color="#666" />
+                    </TouchableOpacity>
+                </View>
+                <View style={[styles.popupBody, styles.loadingContainer]}>
+                    <ActivityIndicator size="large" color="#3498db" />
+                    <Text style={styles.loadingText}>Connecting to chat...</Text>
+                </View>
+                <View style={styles.popupFooter}>
+                    <Text style={styles.footerText}>Powered By AI</Text>
+                </View>
+            </View>
+        );
+    }
+
     // Minimized view
     if (isMinimized) {
         return (
@@ -323,36 +564,30 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
         );
     }
 
-    // Full chat view (only for customers with selected department)
-    if (userType === 'customer' && selectedDepartment) {
+    // Full chat view (only for customers with selected department and language)
+    if (userType === 'customer' && selectedDepartment && selectedLanguage && botStep === 'chat') {
         return (
             <View style={styles.popupContainer}>
                 <View style={styles.popupHeader}>
                     <View style={styles.headerContent}>
-                        <MaterialIcons name="smart-toy" size={24} color="#3498db" />
+                        <MaterialIcons name="chat" size={24} color="#3498db" />
                         <View style={styles.headerTextContainer}>
                             <Text style={styles.headerTitle}>Live Chat - {selectedDepartment.toUpperCase()}</Text>
-                            <Text style={styles.headerSubtitle}>Connected to agent</Text>
+                            <Text style={styles.headerSubtitle}>Connected to agent ({selectedLanguage.toUpperCase()})</Text>
                         </View>
                     </View>
-                <View style={styles.headerButtons}>
-                    <TouchableOpacity onPress={toggleMinimize} style={styles.minimizeButton}>
-                        <MaterialIcons name="remove" size={20} color="#666" />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <MaterialIcons name="close" size={20} color="#666" />
-                    </TouchableOpacity>
-                </View>
-            </View>
-
-            <View style={styles.popupBody}>
-                {loadingChatSetup ? (
-                    <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="small" color="#3498db" />
-                        <Text style={styles.loadingText}>Connecting to chat...</Text>
+                    <View style={styles.headerButtons}>
+                        <TouchableOpacity onPress={toggleMinimize} style={styles.minimizeButton}>
+                            <MaterialIcons name="remove" size={20} color="#666" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                            <MaterialIcons name="close" size={20} color="#666" />
+                        </TouchableOpacity>
                     </View>
-                ) : (
-                    <div 
+                </View>
+
+                <View style={styles.popupBody}>
+                    <ScrollView 
                         ref={flatListRef}
                         style={styles.messagesWrapper}
                         onScroll={handleScroll}
@@ -363,44 +598,59 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                                     <Text style={styles.emptyStateText}>No messages yet. Start the conversation!</Text>
                                 </View>
                             ) : (
-                                messages.map(message => (
-                                    <View key={message.id} style={[
-                                        styles.messageBubble,
-                                        message.senderId === userId ? styles.myMessage : styles.otherMessage
-                                    ]}>
-                                        <Text style={styles.messageText}>{message.text}</Text>
-                                        <Text style={styles.messageTimestamp}>{message.timestamp}</Text>
-                                    </View>
-                                ))
+                                messages.map(message => {
+                                    // Handle different message formats
+                                    let messageText = '';
+                                    if (message.text) {
+                                        // Bot messages (local state)
+                                        messageText = message.text;
+                                    } else if (message.originalText) {
+                                        // Firebase messages - show original text for customer
+                                        messageText = message.originalText;
+                                    } else {
+                                        // Fallback
+                                        messageText = 'Message content not available';
+                                    }
+
+                                    return (
+                                        <View key={message.id} style={[
+                                            styles.messageBubble,
+                                            message.senderId === userId ? styles.myMessage : styles.otherMessage
+                                        ]}>
+                                            <Text style={styles.messageText}>{messageText}</Text>
+                                            <Text style={styles.messageTimestamp}>{message.timestamp}</Text>
+                                        </View>
+                                    );
+                                })
                             )}
                         </View>
-                    </div>
-                )}
+                    </ScrollView>
 
-                {showScrollButton && (
-                    <TouchableOpacity
-                        style={styles.scrollToBottomButton}
-                        onPress={handleScrollToBottom}
-                    >
-                        <MaterialIcons name="keyboard-arrow-down" size={16} color="white" />
+                    {showScrollButton && (
+                        <TouchableOpacity
+                            style={styles.scrollToBottomButton}
+                            onPress={handleScrollToBottom}
+                        >
+                            <MaterialIcons name="keyboard-arrow-down" size={16} color="white" />
+                        </TouchableOpacity>
+                    )}
+                </View>
+
+                <View style={styles.inputContainer}>
+                    <TextInput
+                        style={styles.textInput}
+                        value={inputText}
+                        onChangeText={setInputText}
+                        placeholder={`Type your message in ${selectedLanguage === 'en' ? 'English' : 'Spanish'}...`}
+                        multiline
+                        onKeyPress={handleKeyPress}
+                    />
+                    <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
+                        <MaterialIcons name="send" size={16} color="white" />
                     </TouchableOpacity>
-                )}
+                </View>
             </View>
-
-            <View style={styles.inputContainer}>
-                <TextInput
-                    style={styles.textInput}
-                    value={inputText}
-                    onChangeText={setInputText}
-                    placeholder="Type your message..."
-                    multiline
-                />
-                <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
-                    <MaterialIcons name="send" size={16} color="white" />
-                </TouchableOpacity>
-            </View>
-        </View>
-    );
+        );
     }
 
     // If we reach here, something went wrong - return null
@@ -487,6 +737,10 @@ const styles = StyleSheet.create({
     closeButton: {
         padding: 5,
     },
+    backButton: {
+        padding: 5,
+        marginRight: 5,
+    },
     popupBody: {
         flex: 1,
         backgroundColor: '#f8f9fa',
@@ -522,9 +776,36 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginLeft: 8,
     },
-    backButton: {
-        padding: 5,
-        marginRight: 5,
+    languageSelectionContainer: {
+        padding: 15,
+        borderTopWidth: 1,
+        borderTopColor: '#e9ecef',
+        backgroundColor: '#fff',
+    },
+    languageSelectionText: {
+        fontSize: 14,
+        color: '#495057',
+        textAlign: 'center',
+        marginBottom: 15,
+    },
+    languageButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#3498db',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 8,
+        marginBottom: 10,
+        justifyContent: 'center',
+    },
+    spanishButton: {
+        backgroundColor: '#e74c3c',
+    },
+    languageButtonText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginLeft: 8,
     },
     popupFooter: {
         padding: 10,
@@ -547,14 +828,8 @@ const styles = StyleSheet.create({
         color: '#6c757d',
     },
     messagesWrapper: {
-        height: '100%',
-        overflow: 'auto',
+        flex: 1,
         backgroundColor: '#f8f9fa',
-        ...(Platform.OS === 'web' && {
-            WebkitOverflowScrolling: 'touch',
-            scrollbarWidth: 'thin',
-            scrollbarColor: '#3498db #f8f9fa',
-        }),
     },
     messagesList: {
         padding: 10,
@@ -574,6 +849,11 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-end',
         backgroundColor: '#dcf8c6',
         borderBottomRightRadius: 4,
+    },
+    botMessage: {
+        alignSelf: 'flex-start',
+        backgroundColor: '#e9f5ff',
+        borderBottomLeftRadius: 4,
     },
     otherMessage: {
         alignSelf: 'flex-start',

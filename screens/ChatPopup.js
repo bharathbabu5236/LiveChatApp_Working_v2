@@ -4,6 +4,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platfo
 import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth, appId, authReadyPromise, signInAnonymously } from '../firebaseConfig';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, getDocs, where } from 'firebase/firestore';
+import { translateMessage, getSupportedLanguagesArray, getNativeLanguageName, testTranslation } from '../translationService';
 
 const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const [messages, setMessages] = useState([]);
@@ -19,6 +20,17 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
     const flatListRef = useRef(null);
+
+    // Test translation service on component mount
+    useEffect(() => {
+        testTranslation().then(result => {
+            if (result) {
+                console.log('ChatPopup: Translation service test successful');
+            } else {
+                console.error('ChatPopup: Translation service test failed');
+            }
+        });
+    }, []);
 
     // Agent UIDs - replace with actual UIDs from Firebase Authentication
     const AGENT_DOCTOR_UID = 'UVGDfqIPKYVblK3OhRfenFa0BVp2';
@@ -174,7 +186,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                 if (flatListRef.current) {
                     setTimeout(() => {
                         if (flatListRef.current) {
-                            flatListRef.current.scrollTop = flatListRef.current.scrollHeight;
+                            flatListRef.current.scrollToEnd({ animated: true });
                         }
                     }, 100);
                 }
@@ -208,9 +220,9 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             // If customer is using non-English, translate to English for agent
             if (selectedLanguage !== 'en') {
                 console.log(`ChatPopup: Translating from ${selectedLanguage} to English...`);
-                // Here you would call your translation API
-                // For now, we'll use the original text
-                translatedTextEn = inputText.trim();
+                const translation = await translateMessage(inputText.trim(), 'en', selectedLanguage);
+                translatedTextEn = translation.translatedText;
+                console.log("ChatPopup: Translation result:", translation);
             }
 
             const messagesRef = collection(db, `artifacts/${appId}/public/data/chats/${chatId}/messages`);
@@ -299,7 +311,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             setMessages(prevMessages => [...prevMessages, {
                 id: Date.now().toString() + 'bot',
                 senderType: 'bot',
-                text: `Great! I'll connect you with an agent who speaks ${language === 'en' ? 'English' : 'Spanish'}. Now, please select a department:`,
+                text: `Great! I'll connect you with an agent who speaks ${getNativeLanguageName(language)}. Now, please select a department:`,
                 timestamp: new Date().toLocaleString(),
             }]);
         }, 500);
@@ -307,12 +319,16 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
 
     const handleScrollToBottom = () => {
         if (flatListRef.current) {
-            flatListRef.current.scrollTop = flatListRef.current.scrollHeight;
+            flatListRef.current.scrollToEnd({ animated: true });
         }
     };
 
     const handleScroll = (event) => {
-        const { scrollTop, scrollHeight, clientHeight } = event.target;
+        // React Native ScrollView event structure is different from web
+        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+        const scrollTop = contentOffset.y;
+        const scrollHeight = contentSize.height;
+        const clientHeight = layoutMeasurement.height;
         const isCloseToBottom = scrollTop + clientHeight >= scrollHeight - 20;
         setShowScrollButton(!isCloseToBottom);
     };
@@ -417,20 +433,23 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                     {botStep === 'askLanguage' && (
                         <View style={styles.languageSelectionContainer}>
                             <Text style={styles.languageSelectionText}>Select your preferred language:</Text>
-                            <TouchableOpacity
-                                style={styles.languageButton}
-                                onPress={() => handleLanguageSelection('en')}
-                            >
-                                <MaterialIcons name="language" size={20} color="white" />
-                                <Text style={styles.languageButtonText}>English</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.languageButton, styles.spanishButton]}
-                                onPress={() => handleLanguageSelection('es')}
-                            >
-                                <MaterialIcons name="language" size={20} color="white" />
-                                <Text style={styles.languageButtonText}>Español</Text>
-                            </TouchableOpacity>
+                            <ScrollView style={styles.languageScrollView}>
+                                {getSupportedLanguagesArray().slice(0, 20).map((lang) => (
+                                    <TouchableOpacity
+                                        key={lang.code}
+                                        style={[
+                                            styles.languageButton,
+                                            selectedLanguage === lang.code && styles.selectedLanguageButton
+                                        ]}
+                                        onPress={() => handleLanguageSelection(lang.code)}
+                                    >
+                                        <MaterialIcons name="language" size={20} color="white" />
+                                        <Text style={styles.languageButtonText}>
+                                            {lang.nativeName} ({lang.name})
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
                         </View>
                     )}
                 </View>
@@ -601,15 +620,49 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                                 messages.map(message => {
                                     // Handle different message formats
                                     let messageText = '';
+                                    console.log(`ChatPopup: Processing message:`, {
+                                        id: message.id,
+                                        senderId: message.senderId,
+                                        senderType: message.senderType,
+                                        userId: userId,
+                                        hasText: !!message.text,
+                                        hasOriginalText: !!message.originalText,
+                                        hasTranslatedText: !!message.translatedText,
+                                        text: message.text,
+                                        originalText: message.originalText,
+                                        translatedText: message.translatedText
+                                    });
+
                                     if (message.text) {
                                         // Bot messages (local state)
                                         messageText = message.text;
-                                    } else if (message.originalText) {
-                                        // Firebase messages - show original text for customer
-                                        messageText = message.originalText;
+                                        console.log(`ChatPopup: Using bot message text: "${messageText}"`);
+                                    } else if (message.senderId === userId) {
+                                        // Customer's own messages - show original text
+                                        messageText = message.originalText || 'Message content not available';
+                                        console.log(`ChatPopup: Using customer's original text: "${messageText}"`);
                                     } else {
-                                        // Fallback
-                                        messageText = 'Message content not available';
+                                        // Agent messages - show translated text to customer
+                                        console.log(`ChatPopup: Processing agent message:`, {
+                                            hasTranslatedText: !!message.translatedText,
+                                            translatedText: message.translatedText,
+                                            originalText: message.originalText,
+                                            text: message.text
+                                        });
+                                        if (message.translatedText) {
+                                            messageText = message.translatedText;
+                                            console.log(`ChatPopup: Using agent's translated text: "${messageText}"`);
+                                        } else if (message.originalText) {
+                                            messageText = message.originalText;
+                                            console.log(`ChatPopup: Using agent's original text (no translation): "${messageText}"`);
+                                        } else if (message.text) {
+                                            messageText = message.text;
+                                            console.log(`ChatPopup: Using agent's text field: "${messageText}"`);
+                                        } else {
+                                            messageText = 'Message content not available';
+                                            console.log(`ChatPopup: No message content available`);
+                                        }
+                                        console.log(`ChatPopup: Final message text: "${messageText}"`);
                                     }
 
                                     return (
@@ -641,7 +694,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                         style={styles.textInput}
                         value={inputText}
                         onChangeText={setInputText}
-                        placeholder={`Type your message in ${selectedLanguage === 'en' ? 'English' : 'Spanish'}...`}
+                        placeholder={`Type your message in ${getNativeLanguageName(selectedLanguage)}...`}
                         multiline
                         onKeyPress={handleKeyPress}
                     />
@@ -924,6 +977,14 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#6c757d',
         textAlign: 'center',
+    },
+    languageScrollView: {
+        maxHeight: 200,
+    },
+    selectedLanguageButton: {
+        backgroundColor: '#27ae60',
+        borderWidth: 2,
+        borderColor: '#2ecc71',
     },
 });
 

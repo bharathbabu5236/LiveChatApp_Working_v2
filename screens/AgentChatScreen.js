@@ -1,9 +1,10 @@
 // LiveChatApp/screens/AgentChatScreen.js
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Alert, ScrollView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth, appId } from '../firebaseConfig';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { translateMessage, testTranslation } from '../translationService';
 
 const AgentChatScreen = ({ route, navigation }) => {
     const { chatId, customerId } = route.params;
@@ -11,17 +12,32 @@ const AgentChatScreen = ({ route, navigation }) => {
     const [inputText, setInputText] = useState('');
     const [chatStatus, setChatStatus] = useState('');
     const [showScrollButton, setShowScrollButton] = useState(false);
-    const flatListRef = useRef(null);
+    const scrollViewRef = useRef(null);
     const currentAgentId = auth.currentUser?.uid;
 
+    // Test translation service on component mount
+    useEffect(() => {
+        testTranslation().then(result => {
+            if (result) {
+                console.log('AgentChatScreen: Translation service test successful');
+            } else {
+                console.error('AgentChatScreen: Translation service test failed');
+            }
+        });
+    }, []);
+
     const handleScrollToBottom = () => {
-        if (flatListRef.current) {
-            flatListRef.current.scrollTop = flatListRef.current.scrollHeight;
+        if (scrollViewRef.current) {
+            scrollViewRef.current.scrollToEnd({ animated: true });
         }
     };
 
     const handleScroll = (event) => {
-        const { scrollTop, scrollHeight, clientHeight } = event.target;
+        // React Native ScrollView event structure is different from web
+        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+        const scrollTop = contentOffset.y;
+        const scrollHeight = contentSize.height;
+        const clientHeight = layoutMeasurement.height;
         const isCloseToBottom = scrollTop + clientHeight >= scrollHeight - 20;
         setShowScrollButton(!isCloseToBottom);
     };
@@ -55,8 +71,8 @@ const AgentChatScreen = ({ route, navigation }) => {
             }));
             setMessages(loadedMessages);
             // Scroll to bottom when new messages arrive
-            if (flatListRef.current) {
-                flatListRef.current.scrollToEnd({ animated: true });
+            if (scrollViewRef.current) {
+                scrollViewRef.current.scrollToEnd({ animated: true });
             }
         }, (error) => {
             console.error("Error fetching messages:", error);
@@ -77,20 +93,50 @@ const AgentChatScreen = ({ route, navigation }) => {
         }
 
         try {
-            const messagesRef = collection(db, `artifacts/${appId}/public/data/chats/${chatId}/messages`);
-            await addDoc(messagesRef, {
+            // Get the customer's language from the chat document
+            const chatDocRef = doc(db, `artifacts/${appId}/public/data/chats`, chatId);
+            const chatDoc = await getDoc(chatDocRef);
+            const customerLanguage = chatDoc.data()?.customerLanguage || 'en';
+
+            console.log(`AgentChatScreen: Starting message send process...`);
+            console.log(`AgentChatScreen: Customer language: ${customerLanguage}`);
+            console.log(`AgentChatScreen: Input text: "${inputText.trim()}"`);
+
+            let translatedText = inputText.trim();
+            let originalText = inputText.trim();
+
+            // If customer is not using English, translate agent's message to customer's language
+            if (customerLanguage !== 'en') {
+                console.log(`AgentChatScreen: Translating from English to ${customerLanguage}...`);
+                const translation = await translateMessage(inputText.trim(), customerLanguage, 'en');
+                translatedText = translation.translatedText;
+                console.log("AgentChatScreen: Translation result:", translation);
+                console.log(`AgentChatScreen: Final translated text: "${translatedText}"`);
+            } else {
+                console.log(`AgentChatScreen: No translation needed (customer language is English)`);
+            }
+
+            const messageData = {
                 senderId: currentAgentId,
                 senderType: 'agent',
-                text: inputText,
+                originalText: originalText,
+                translatedText: translatedText,
+                language: customerLanguage,
                 timestamp: serverTimestamp(),
-            });
+            };
+
+            console.log(`AgentChatScreen: Storing message with data:`, messageData);
+
+            const messagesRef = collection(db, `artifacts/${appId}/public/data/chats/${chatId}/messages`);
+            await addDoc(messagesRef, messageData);
             setInputText('');
 
             // Update lastMessageAt in the chat document
-            const chatDocRef = doc(db, `artifacts/${appId}/public/data/chats`, chatId);
             await updateDoc(chatDocRef, {
                 lastMessageAt: serverTimestamp(),
             });
+
+            console.log(`AgentChatScreen: Message sent successfully`);
 
         } catch (error) {
             console.error("Error sending message:", error);
@@ -139,8 +185,8 @@ const handleCloseChat = () => {
             </View>
 
             <View style={styles.chatArea}>
-                <div 
-                    ref={flatListRef}
+                <ScrollView
+                    ref={scrollViewRef}
                     style={styles.messagesWrapper}
                     onScroll={handleScroll}
                 >
@@ -154,8 +200,8 @@ const handleCloseChat = () => {
                                 // Handle different message formats
                                 let messageText = '';
                                 if (message.senderId === currentAgentId) {
-                                    // Agent's own messages use 'text' field
-                                    messageText = message.text || 'Message content not available';
+                                    // Agent's own messages - show original English text
+                                    messageText = message.originalText || message.text || 'Message content not available';
                                 } else {
                                     // Customer messages - show translated English version to agent
                                     if (message.translatedTextEn) {
@@ -184,7 +230,7 @@ const handleCloseChat = () => {
                             })
                         )}
                     </View>
-                </div>
+                </ScrollView>
             </View>
 
             <View style={styles.inputContainer}>

@@ -19,6 +19,8 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const [loadingChatSetup, setLoadingChatSetup] = useState(false);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
+    const [showLanguageModal, setShowLanguageModal] = useState(false);
+    const [supportedLanguages, setSupportedLanguages] = useState([]);
     const flatListRef = useRef(null);
 
     // Test translation service on component mount
@@ -30,6 +32,20 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                 console.error('ChatPopup: Translation service test failed');
             }
         });
+    }, []);
+
+    // Load supported languages
+    useEffect(() => {
+        const loadLanguages = async () => {
+            try {
+                const languages = getSupportedLanguagesArray();
+                setSupportedLanguages(languages);
+            } catch (error) {
+                console.error('Error loading languages:', error);
+            }
+        };
+        
+        loadLanguages();
     }, []);
 
     // Agent UIDs - replace with actual UIDs from Firebase Authentication
@@ -168,6 +184,22 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
         }
     }, [selectedDepartment, selectedLanguage]);
 
+    // Auto-proceed to department selection when language is selected from header during bot flow
+    useEffect(() => {
+        if (botStep === 'askLanguageFromHeader' && selectedLanguage) {
+            setBotStep('departmentSelection');
+            // Add bot confirmation message
+            setTimeout(() => {
+                setMessages(prevMessages => [...prevMessages, {
+                    id: Date.now().toString() + 'bot',
+                    senderType: 'bot',
+                    text: `Great! I'll connect you with an agent who speaks ${getNativeLanguageName(selectedLanguage)}. Now, please select a department:`,
+                    timestamp: new Date().toLocaleString(),
+                }]);
+            }, 500);
+        }
+    }, [selectedLanguage, botStep]);
+
     useEffect(() => {
         if (chatId) {
             console.log("ChatPopup: Listening for messages in chat:", chatId);
@@ -286,14 +318,14 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             }, 500);
         } else if (botStep === 'askPhone') {
             setCustomerInfo(prev => ({ ...prev, phone: inputText.trim() }));
-            setBotStep('askLanguage');
+            setBotStep('askLanguageFromHeader');
             setInputText('');
             // Simulate bot response
             setTimeout(() => {
                 setMessages(prevMessages => [...prevMessages, {
                     id: Date.now().toString() + 'bot',
                     senderType: 'bot',
-                    text: `Thank you! What's your preferred language for this chat?`,
+                    text: `Thank you! Please select your preferred language from the dropdown in the header above, then I'll connect you with an agent.`,
                     timestamp: new Date().toLocaleString(),
                 }]);
             }, 500);
@@ -304,7 +336,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
         // Handle Enter key (send message)
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
-            if (botStep === 'askName' || botStep === 'askPhone' || botStep === 'askLanguage') {
+            if (botStep === 'askName' || botStep === 'askPhone') {
                 handleBotInput();
             } else if (botStep === 'chat') {
                 handleSendMessage();
@@ -326,6 +358,27 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                 timestamp: new Date().toLocaleString(),
             }]);
         }, 500);
+    };
+
+    // Handle language change in active chat
+    const handleLanguageChange = async (languageCode) => {
+        try {
+            setSelectedLanguage(languageCode);
+            setShowLanguageModal(false);
+            
+            // Update the chat document with the new customer language
+            if (chatId) {
+                const chatDocRef = doc(db, `artifacts/${appId}/public/data/chats`, chatId);
+                await updateDoc(chatDocRef, {
+                    customerLanguage: languageCode,
+                    lastUpdated: serverTimestamp()
+                });
+                console.log(`ChatPopup: Customer language updated to: ${languageCode}`);
+            }
+        } catch (error) {
+            console.error('Error updating customer language:', error);
+            Alert.alert('Error', 'Failed to update language preference');
+        }
     };
 
     const handleScrollToBottom = () => {
@@ -397,7 +450,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     }
 
     // Bot conversation views (for customers)
-    if (userType === 'customer' && (botStep === 'askName' || botStep === 'askPhone' || botStep === 'askLanguage')) {
+    if (userType === 'customer' && (botStep === 'askName' || botStep === 'askPhone' || botStep === 'askLanguageFromHeader')) {
         return (
             <View style={styles.popupContainer}>
                 <View style={styles.popupHeader}>
@@ -408,12 +461,23 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                             <Text style={styles.headerSubtitle}>Collecting your information</Text>
                         </View>
                     </View>
-                    <TouchableOpacity onPress={() => setUserType(null)} style={styles.backButton}>
-                        <MaterialIcons name="arrow-back" size={20} color="#666" />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <MaterialIcons name="close" size={20} color="#666" />
-                    </TouchableOpacity>
+                    <View style={styles.headerButtons}>
+                        <TouchableOpacity 
+                            onPress={() => setShowLanguageModal(true)} 
+                            style={styles.languageButton}
+                        >
+                            <MaterialIcons name="language" size={16} color="white" />
+                            <Text style={styles.languageButtonText}>
+                                {selectedLanguage ? getNativeLanguageName(selectedLanguage) : 'Select Language'}
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => setUserType(null)} style={styles.backButton}>
+                            <MaterialIcons name="arrow-back" size={20} color="#666" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                            <MaterialIcons name="close" size={20} color="#666" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
                 
                 <View style={styles.popupBody}>
@@ -439,31 +503,8 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                                 ))
                             )}
                         </View>
-                    </ScrollView>
-                    
-                    {botStep === 'askLanguage' && (
-                        <View style={styles.languageSelectionContainer}>
-                            <Text style={styles.languageSelectionText}>Select your preferred language:</Text>
-                            <ScrollView style={styles.languageScrollView}>
-                                {getSupportedLanguagesArray().slice(0, 20).map((lang) => (
-                                    <TouchableOpacity
-                                        key={lang.code}
-                                        style={[
-                                            styles.languageButton,
-                                            selectedLanguage === lang.code && styles.selectedLanguageButton
-                                        ]}
-                                        onPress={() => handleLanguageSelection(lang.code)}
-                                    >
-                                        <MaterialIcons name="language" size={20} color="white" />
-                                        <Text style={styles.languageButtonText}>
-                                            {lang.nativeName} ({lang.name})
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        </View>
-                    )}
-                </View>
+                                         </ScrollView>
+                 </View>
                 
                 {(botStep === 'askName' || botStep === 'askPhone') && (
                     <View style={styles.inputContainer}>
@@ -479,14 +520,58 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                             <MaterialIcons name="send" size={16} color="white" />
                         </TouchableOpacity>
                     </View>
-                )}
-                
-                <View style={styles.popupFooter}>
-                    <Text style={styles.footerText}>Powered By AI</Text>
-                </View>
-            </View>
-        );
-    }
+                                 )}
+
+                 <View style={styles.popupFooter}>
+                     <Text style={styles.footerText}>Powered By AI</Text>
+                 </View>
+
+                 {/* Language Selection Modal */}
+                 <Modal
+                     visible={showLanguageModal}
+                     transparent={true}
+                     animationType="slide"
+                     onRequestClose={() => setShowLanguageModal(false)}
+                 >
+                     <View style={styles.modalOverlay}>
+                         <View style={styles.modalContent}>
+                             <View style={styles.modalHeader}>
+                                 <Text style={styles.modalTitle}>Select Your Language</Text>
+                                 <TouchableOpacity 
+                                     onPress={() => setShowLanguageModal(false)}
+                                     style={styles.closeButton}
+                                 >
+                                     <MaterialIcons name="close" size={24} color="#666" />
+                                 </TouchableOpacity>
+                             </View>
+                             <ScrollView style={styles.languageListContainer}>
+                                 {supportedLanguages.map((lang) => (
+                                     <TouchableOpacity
+                                         key={lang.code}
+                                         style={[
+                                             styles.languageOption,
+                                             selectedLanguage === lang.code && styles.selectedLanguageOption
+                                         ]}
+                                         onPress={() => {
+                                             setSelectedLanguage(lang.code);
+                                             setShowLanguageModal(false);
+                                         }}
+                                     >
+                                         <Text style={styles.languageOptionText}>
+                                             {lang.nativeName} ({lang.name})
+                                         </Text>
+                                         {selectedLanguage === lang.code && (
+                                             <MaterialIcons name="check" size={20} color="#2ecc71" />
+                                         )}
+                                     </TouchableOpacity>
+                                 ))}
+                             </ScrollView>
+                         </View>
+                     </View>
+                 </Modal>
+             </View>
+         );
+     }
 
     // Department selection view (for customers after bot conversation)
     if (userType === 'customer' && botStep === 'departmentSelection' && !selectedDepartment) {
@@ -716,10 +801,10 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                     <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
                         <MaterialIcons name="send" size={16} color="white" />
                     </TouchableOpacity>
-                </View>
-            </View>
-        );
-    }
+                                 </View>
+             </View>
+         );
+     }
 
     // If we reach here, something went wrong - return null
     return null;
@@ -1000,6 +1085,73 @@ const styles = StyleSheet.create({
         backgroundColor: '#27ae60',
         borderWidth: 2,
         borderColor: '#2ecc71',
+    },
+    // Language button in header
+    languageButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#3498db',
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderRadius: 4,
+        marginRight: 8,
+    },
+    languageButtonText: {
+        color: 'white',
+        marginLeft: 4,
+        fontWeight: 'bold',
+        fontSize: 10,
+    },
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        backgroundColor: 'white',
+        borderRadius: 15,
+        width: '90%',
+        maxHeight: '80%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    languageListContainer: {
+        maxHeight: 400,
+    },
+    languageOption: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+    },
+    selectedLanguageOption: {
+        backgroundColor: '#f8f9fa',
+        borderLeftWidth: 4,
+        borderLeftColor: '#3498db',
+    },
+    languageOptionText: {
+        fontSize: 16,
+        color: '#333',
     },
 });
 

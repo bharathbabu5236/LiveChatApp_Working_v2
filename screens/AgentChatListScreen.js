@@ -1,14 +1,18 @@
 // LiveChatApp/screens/AgentChatListScreen.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, Alert, ScrollView, Modal } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { auth, db, appId, signOut } from '../firebaseConfig';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, where, getDoc, setDoc } from 'firebase/firestore';
 import { MaterialIcons } from '@expo/vector-icons'; // Added MaterialIcons import
+import { getSupportedLanguagesArray, getLanguageName } from '../translationService';
 
 const AgentChatListScreen = () => {
     const [chats, setChats] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [agentLanguage, setAgentLanguage] = useState('en');
+    const [showLanguageModal, setShowLanguageModal] = useState(false);
+    const [supportedLanguages, setSupportedLanguages] = useState([]);
     const navigation = useNavigation();
     const currentAgentId = auth.currentUser?.uid;
     const currentAgentEmail = auth.currentUser?.email;
@@ -19,6 +23,51 @@ const AgentChatListScreen = () => {
     };
 
     const currentAgentDepartment = AGENT_DEPARTMENT_MAP[currentAgentId];
+
+    // Load supported languages and agent's language preference
+    useEffect(() => {
+        const loadLanguages = async () => {
+            try {
+                const languages = getSupportedLanguagesArray();
+                setSupportedLanguages(languages);
+                
+                // Try to load agent's language preference from Firebase first
+                if (currentAgentId) {
+                    try {
+                        const agentDocRef = doc(db, `artifacts/${appId}/public/data/agents`, currentAgentId);
+                        const agentDoc = await getDoc(agentDocRef);
+                        if (agentDoc.exists()) {
+                            const agentData = agentDoc.data();
+                            if (agentData.preferredLanguage) {
+                                setAgentLanguage(agentData.preferredLanguage);
+                                console.log(`AgentChatListScreen: Agent language preference loaded from Firebase: ${agentData.preferredLanguage}`);
+                                return;
+                            }
+                        }
+                    } catch (firebaseError) {
+                        console.warn('Firebase permission error, trying localStorage fallback:', firebaseError.message);
+                    }
+                    
+                    // Fallback to localStorage if Firebase fails
+                    try {
+                        const storedLanguage = localStorage.getItem(`agent_language_${currentAgentId}`);
+                        if (storedLanguage) {
+                            setAgentLanguage(storedLanguage);
+                            console.log(`AgentChatListScreen: Agent language preference loaded from localStorage: ${storedLanguage}`);
+                        } else {
+                            console.log(`AgentChatListScreen: No language preference found, using default: en`);
+                        }
+                    } catch (localStorageError) {
+                        console.error('Error loading from localStorage:', localStorageError);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading languages:', error);
+            }
+        };
+        
+        loadLanguages();
+    }, [currentAgentId]);
 
     useEffect(() => {
         if (!currentAgentId) {
@@ -58,6 +107,40 @@ const AgentChatListScreen = () => {
 
         return unsubscribe;
     }, [currentAgentId, currentAgentDepartment]);
+
+    const handleLanguageSelect = async (languageCode) => {
+        try {
+            setAgentLanguage(languageCode);
+            setShowLanguageModal(false);
+            
+            // Save agent's language preference to Firebase
+            if (currentAgentId) {
+                try {
+                    const agentDocRef = doc(db, `artifacts/${appId}/public/data/agents`, currentAgentId);
+                    await setDoc(agentDocRef, {
+                        preferredLanguage: languageCode,
+                        email: currentAgentEmail,
+                        department: currentAgentDepartment,
+                        lastUpdated: new Date().toISOString()
+                    }, { merge: true });
+                    console.log(`AgentChatListScreen: Language preference saved to Firebase: ${languageCode}`);
+                } catch (firebaseError) {
+                    console.warn('Firebase permission error, saving to localStorage:', firebaseError.message);
+                }
+                
+                // Always save to localStorage as backup
+                try {
+                    localStorage.setItem(`agent_language_${currentAgentId}`, languageCode);
+                    console.log(`AgentChatListScreen: Language preference saved to localStorage: ${languageCode}`);
+                } catch (localStorageError) {
+                    console.error('Error saving to localStorage:', localStorageError);
+                }
+            }
+        } catch (error) {
+            console.error('Error saving language preference:', error);
+            Alert.alert('Error', 'Failed to save language preference');
+        }
+    };
 
     const handleLogout = async () => {
         try {
@@ -125,10 +208,21 @@ const AgentChatListScreen = () => {
         <View style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Active Chats</Text>
-                <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                    <MaterialIcons name="logout" size={24} color="white" />
-                    <Text style={styles.logoutButtonText}>Logout</Text>
-                </TouchableOpacity>
+                <View style={styles.headerButtons}>
+                    <TouchableOpacity 
+                        onPress={() => setShowLanguageModal(true)} 
+                        style={styles.languageButton}
+                    >
+                        <MaterialIcons name="language" size={20} color="white" />
+                        <Text style={styles.languageButtonText}>
+                            {getLanguageName(agentLanguage)}
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+                        <MaterialIcons name="logout" size={24} color="white" />
+                        <Text style={styles.logoutButtonText}>Logout</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
             <Text style={styles.agentInfo}>Logged in as: {currentAgentEmail || 'N/A'}</Text>
             <Text style={styles.agentInfo}>Agent ID: {currentAgentId || 'N/A'}</Text>
@@ -150,6 +244,51 @@ const AgentChatListScreen = () => {
                     </ScrollView>
                 </View>
             )}
+
+            {/* Language Selection Modal */}
+            <Modal
+                visible={showLanguageModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowLanguageModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Your Language</Text>
+                            <TouchableOpacity 
+                                onPress={() => setShowLanguageModal(false)}
+                                style={styles.closeButton}
+                            >
+                                <MaterialIcons name="close" size={24} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <ScrollView style={styles.languageList}>
+                            {supportedLanguages.map((language) => (
+                                <TouchableOpacity
+                                    key={language.code}
+                                    style={[
+                                        styles.languageItem,
+                                        agentLanguage === language.code && styles.selectedLanguageItem
+                                    ]}
+                                    onPress={() => handleLanguageSelect(language.code)}
+                                >
+                                    <Text style={[
+                                        styles.languageItemText,
+                                        agentLanguage === language.code && styles.selectedLanguageItemText
+                                    ]}>
+                                        {language.name} ({language.nativeName})
+                                    </Text>
+                                    {agentLanguage === language.code && (
+                                        <MaterialIcons name="check" size={20} color="#3498db" />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -189,6 +328,24 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: 'bold',
         color: 'white',
+    },
+    headerButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    languageButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#2980b9',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        marginRight: 10,
+    },
+    languageButtonText: {
+        color: 'white',
+        marginLeft: 5,
+        fontWeight: 'bold',
     },
     logoutButton: {
         flexDirection: 'row',
@@ -261,6 +418,65 @@ const styles = StyleSheet.create({
         color: '#777',
         textAlign: 'center',
         marginTop: 50,
+    },
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        backgroundColor: 'white',
+        borderRadius: 15,
+        width: '90%',
+        maxHeight: '80%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    closeButton: {
+        padding: 5,
+    },
+    languageList: {
+        maxHeight: 400,
+    },
+    languageItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f0f0f0',
+    },
+    selectedLanguageItem: {
+        backgroundColor: '#e3f2fd',
+        borderLeftWidth: 4,
+        borderLeftColor: '#3498db',
+    },
+    languageItemText: {
+        fontSize: 16,
+        color: '#333',
+        flex: 1,
+    },
+    selectedLanguageItemText: {
+        color: '#3498db',
+        fontWeight: 'bold',
     },
 });
 

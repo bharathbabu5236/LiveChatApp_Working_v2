@@ -182,6 +182,17 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                 }));
                 setMessages(loadedMessages);
                 console.log("ChatPopup: Messages loaded:", loadedMessages.length);
+                console.log("ChatPopup: Message details:", loadedMessages.map(msg => ({
+                    id: msg.id,
+                    senderId: msg.senderId,
+                    senderType: msg.senderType,
+                    hasOriginalText: !!msg.originalText,
+                    hasTranslatedText: !!msg.translatedText,
+                    hasText: !!msg.text,
+                    originalText: msg.originalText,
+                    translatedText: msg.translatedText,
+                    text: msg.text
+                })));
                 // Scroll to bottom when new messages arrive
                 if (flatListRef.current) {
                     setTimeout(() => {
@@ -644,12 +655,16 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                                     } else {
                                         // Agent messages - show translated text to customer
                                         console.log(`ChatPopup: Processing agent message:`, {
+                                            senderType: message.senderType,
                                             hasTranslatedText: !!message.translatedText,
                                             translatedText: message.translatedText,
                                             originalText: message.originalText,
-                                            text: message.text
+                                            text: message.text,
+                                            language: message.language
                                         });
-                                        if (message.translatedText) {
+                                        
+                                        // Check if this is an agent message and has translated text
+                                        if (message.senderType === 'agent' && message.translatedText) {
                                             messageText = message.translatedText;
                                             console.log(`ChatPopup: Using agent's translated text: "${messageText}"`);
                                         } else if (message.originalText) {

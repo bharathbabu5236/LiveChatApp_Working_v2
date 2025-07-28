@@ -1,6 +1,6 @@
 // LiveChatApp/screens/AgentChatListScreen.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Platform, Alert, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { auth, db, appId, signOut } from '../firebaseConfig';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, where } from 'firebase/firestore';
@@ -138,12 +138,17 @@ const AgentChatListScreen = () => {
             {chats.length === 0 ? (
                 <Text style={styles.noChatsText}>No active chats found for your department.</Text>
             ) : (
-                <FlatList
-                    data={chats}
-                    renderItem={renderChatItem}
-                    keyExtractor={item => item.id}
-                    contentContainerStyle={styles.chatListContent}
-                />
+                <View style={styles.chatListContainer}>
+                    <ScrollView
+                        style={styles.chatList}
+                        contentContainerStyle={styles.chatListContent}
+                        showsVerticalScrollIndicator={true}
+                        indicatorStyle="black"
+                        scrollIndicatorInsets={{ right: 0 }}
+                    >
+                        {chats.map(item => renderChatItem({ item }))}
+                    </ScrollView>
+                </View>
             )}
         </View>
     );
@@ -206,6 +211,17 @@ const styles = StyleSheet.create({
     },
     chatListContent: {
         padding: 15,
+        paddingBottom: 20,
+    },
+    chatListContainer: {
+        flex: 1,
+        backgroundColor: '#f0f4f8',
+        marginTop: 10,
+        maxHeight: '70%', // Add explicit height constraint
+    },
+    chatList: {
+        flex: 1,
+        backgroundColor: '#f0f4f8',
     },
     chatItem: {
         padding: 15,

@@ -21,6 +21,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const [isMinimized, setIsMinimized] = useState(false);
     const [showLanguageModal, setShowLanguageModal] = useState(false);
     const [supportedLanguages, setSupportedLanguages] = useState([]);
+    const [translatedCustomerMessages, setTranslatedCustomerMessages] = useState({});
     const flatListRef = useRef(null);
 
     // Test translation service on component mount
@@ -199,6 +200,22 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             }, 500);
         }
     }, [selectedLanguage, botStep]);
+
+    // Re-translate customer messages when their language changes
+    useEffect(() => {
+        if (selectedLanguage && messages.length > 0) {
+            console.log(`ChatPopup: Customer language changed to ${selectedLanguage}, re-translating customer messages`);
+            messages.forEach(message => {
+                if (message.senderId === userId) {
+                    // Translate customer's own messages to their selected language
+                    const messageContent = message.originalText || message.text || message.translatedText;
+                    if (messageContent) {
+                        translateCustomerMessageToDisplayLanguage(message.id, messageContent);
+                    }
+                }
+            });
+        }
+    }, [selectedLanguage, messages, userId]);
 
     useEffect(() => {
         if (chatId) {
@@ -384,6 +401,35 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const handleScrollToBottom = () => {
         if (flatListRef.current) {
             flatListRef.current.scrollToEnd({ animated: true });
+        }
+    };
+
+    // Function to translate customer's own messages to their selected language for display
+    const translateCustomerMessageToDisplayLanguage = async (messageId, originalText) => {
+        try {
+            if (selectedLanguage === 'en') {
+                // If customer prefers English, no translation needed for display
+                setTranslatedCustomerMessages(prev => ({
+                    ...prev,
+                    [messageId]: originalText
+                }));
+                return originalText;
+            }
+
+            console.log(`ChatPopup: Translating customer's message "${originalText}" to ${selectedLanguage} for display`);
+            // Use 'auto' to detect the source language
+            const translation = await translateMessage(originalText, selectedLanguage, 'auto');
+            console.log(`ChatPopup: Customer message translation result:`, translation);
+            
+            setTranslatedCustomerMessages(prev => ({
+                ...prev,
+                [messageId]: translation.translatedText
+            }));
+            
+            return translation.translatedText;
+        } catch (error) {
+            console.error('Error translating customer message to display language:', error);
+            return originalText; // Return original text if translation fails
         }
     };
 
@@ -734,9 +780,25 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                                         messageText = message.text;
                                         console.log(`ChatPopup: Using bot message text: "${messageText}"`);
                                     } else if (message.senderId === userId) {
-                                        // Customer's own messages - show original text
-                                        messageText = message.originalText || 'Message content not available';
-                                        console.log(`ChatPopup: Using customer's original text: "${messageText}"`);
+                                        // Customer's own messages - show translated version in customer's selected language
+                                        if (selectedLanguage === 'en') {
+                                            // Customer prefers English - show original text
+                                            messageText = message.originalText || 'Message content not available';
+                                            console.log(`ChatPopup: Customer message (English) - showing original: "${messageText}"`);
+                                        } else {
+                                            // Customer prefers another language - show translated version
+                                            if (translatedCustomerMessages[message.id]) {
+                                                messageText = translatedCustomerMessages[message.id];
+                                                console.log(`ChatPopup: Customer message - showing translated: "${messageText}"`);
+                                            } else {
+                                                // Trigger translation for display
+                                                const messageContent = message.originalText || message.text || message.translatedText;
+                                                console.log(`ChatPopup: Triggering customer message translation for display`);
+                                                translateCustomerMessageToDisplayLanguage(message.id, messageContent);
+                                                messageText = messageContent || 'Message content not available';
+                                                console.log(`ChatPopup: Customer message - showing original while translating: "${messageText}"`);
+                                            }
+                                        }
                                     } else {
                                         // Agent messages - show translated text to customer
                                         console.log(`ChatPopup: Processing agent message:`, {

@@ -14,6 +14,7 @@ const AgentChatScreen = ({ route, navigation }) => {
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [agentLanguage, setAgentLanguage] = useState('en');
     const [translatedMessages, setTranslatedMessages] = useState({});
+    const [agentMessageTranslations, setAgentMessageTranslations] = useState({});
     const scrollViewRef = useRef(null);
     const currentAgentId = auth.currentUser?.uid;
 
@@ -67,11 +68,19 @@ const AgentChatScreen = ({ route, navigation }) => {
                 if (message.senderId !== currentAgentId && message.originalText) {
                     translateCustomerMessageToAgentLanguage(message.id, message.originalText);
                 }
+                if (message.senderId === currentAgentId) {
+                    // Translate all agent messages to their selected language
+                    const messageContent = message.originalText || message.text || message.translatedText;
+                    if (messageContent) {
+                        translateAgentMessageToDisplayLanguage(message.id, messageContent);
+                    }
+                }
             });
         } else if (agentLanguage === 'en' && messages.length > 0) {
             // Clear translations when agent switches back to English
             console.log(`AgentChatScreen: Agent switched to English, clearing translations`);
             setTranslatedMessages({});
+            setAgentMessageTranslations({});
         }
     }, [agentLanguage, messages]);
 
@@ -261,27 +270,46 @@ const AgentChatScreen = ({ route, navigation }) => {
             console.log(`AgentChatScreen: Starting translation of "${originalText}" to ${agentLanguage}`);
             // Fix: Translate from 'auto' (detect language) to agent's preferred language
             const translation = await translateMessage(originalText, agentLanguage, 'auto');
-            console.log(`AgentChatScreen: Translation API call completed:`, translation);
+            console.log(`AgentChatScreen: Translation result:`, translation);
             
-            console.log(`AgentChatScreen: Translation completed: "${translation.translatedText}"`);
-            
-            setTranslatedMessages(prev => {
-                const newState = {
-                    ...prev,
-                    [messageId]: translation.translatedText
-                };
-                console.log(`AgentChatScreen: Updated translatedMessages state:`, newState);
-                return newState;
-            });
+            setTranslatedMessages(prev => ({
+                ...prev,
+                [messageId]: translation.translatedText
+            }));
             
             return translation.translatedText;
         } catch (error) {
             console.error('Error translating customer message to agent language:', error);
-            setTranslatedMessages(prev => ({
+            return originalText; // Return original text if translation fails
+        }
+    };
+
+    // Function to translate agent's own messages to their selected language for display
+    const translateAgentMessageToDisplayLanguage = async (messageId, originalText) => {
+        try {
+            if (agentLanguage === 'en') {
+                // If agent prefers English, no translation needed for display
+                setAgentMessageTranslations(prev => ({
+                    ...prev,
+                    [messageId]: originalText
+                }));
+                return originalText;
+            }
+
+            console.log(`AgentChatScreen: Translating agent's message "${originalText}" to ${agentLanguage} for display`);
+            // Use 'auto' to detect the source language instead of assuming it's English
+            const translation = await translateMessage(originalText, agentLanguage, 'auto');
+            console.log(`AgentChatScreen: Agent message translation result:`, translation);
+            
+            setAgentMessageTranslations(prev => ({
                 ...prev,
-                [messageId]: originalText // Fallback to original text on error
+                [messageId]: translation.translatedText
             }));
-            return originalText; // Return original message if translation fails
+            
+            return translation.translatedText;
+        } catch (error) {
+            console.error('Error translating agent message to display language:', error);
+            return originalText; // Return original text if translation fails
         }
     };
 
@@ -344,9 +372,25 @@ const handleCloseChat = () => {
                                 });
 
                                 if (message.senderId === currentAgentId) {
-                                    // Agent's own messages - show original English text
-                                    messageText = message.originalText || message.text || 'Message content not available';
-                                    console.log(`AgentChatScreen: Agent message - showing original: "${messageText}"`);
+                                    // Agent's own messages - show translated version in agent's selected language
+                                    if (agentLanguage === 'en') {
+                                        // Agent prefers English - show original text
+                                        messageText = message.originalText || message.text || 'Message content not available';
+                                        console.log(`AgentChatScreen: Agent message (English) - showing original: "${messageText}"`);
+                                    } else {
+                                        // Agent prefers another language - show translated version
+                                        if (agentMessageTranslations[message.id]) {
+                                            messageText = agentMessageTranslations[message.id];
+                                            console.log(`AgentChatScreen: Agent message - showing translated: "${messageText}"`);
+                                        } else {
+                                            // Trigger translation for display - use any available text
+                                            const messageContent = message.originalText || message.text || message.translatedText;
+                                            console.log(`AgentChatScreen: Triggering agent message translation for display`);
+                                            translateAgentMessageToDisplayLanguage(message.id, messageContent);
+                                            messageText = messageContent || 'Message content not available';
+                                            console.log(`AgentChatScreen: Agent message - showing original while translating: "${messageText}"`);
+                                        }
+                                    }
                                 } else {
                                     // Customer messages - show translated version based on agent's language preference
                                     if (agentLanguage === 'en') {

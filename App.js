@@ -10,6 +10,7 @@ import ChatScreen from './screens/ChatScreen';
 import LoginScreen from './screens/LoginScreen';
 import AgentChatListScreen from './screens/AgentChatListScreen';
 import AgentChatScreen from './screens/AgentChatScreen';
+import AdminScreen from './screens/AdminScreen';
 
 const Stack = createStackNavigator();
 
@@ -85,6 +86,11 @@ export default function App() {
         <Stack.Screen
           name="AgentStack"
           component={AgentStack}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Admin"
+          component={AdminScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

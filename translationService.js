@@ -1,11 +1,10 @@
 // LiveChatApp/translationService.js
 
-// Azure Translator Configuration
-const AZURE_TRANSLATOR_KEY = '3nlfAFyVdqvZfDnPn0jCPueQDWa0XfLO9SINDaAjARXbGfXSEjyyJQQJ99BGAC8vTInXJ3w3AAAbACOGi6jS'; // Replace with your Azure Translator key from Azure Portal
-const AZURE_TRANSLATOR_REGION = 'westus2'; // Replace with your Azure region from Azure Portal (e.g., 'eastus', 'westeurope')
-const AZURE_TRANSLATOR_ENDPOINT = 'https://api.cognitive.microsofttranslator.com';
+// Google Translate Configuration
+const GOOGLE_TRANSLATE_API_KEY = 'AIzaSyCJALQzXTUdWubtI2VnGzPZBk2Do20Ec28'; // Replace with your API key from JSON file
+const GOOGLE_TRANSLATE_ENDPOINT = 'https://translation.googleapis.com/language/translate/v2';
 
-// Supported languages with their codes and display names
+// Supported languages with their codes and display names (Google Translate supported languages)
 export const SUPPORTED_LANGUAGES = {
   en: { name: 'English', nativeName: 'English' },
   es: { name: 'Spanish', nativeName: 'Español' },
@@ -109,7 +108,7 @@ export const SUPPORTED_LANGUAGES = {
   yo: { name: 'Yoruba', nativeName: 'Yorùbá' }
 };
 
-// Function to translate text using Azure Translator
+// Function to translate text using Google Translate
 export const translateText = async (text, targetLanguage, sourceLanguage = 'auto') => {
   try {
     if (!text || text.trim() === '') {
@@ -122,43 +121,44 @@ export const translateText = async (text, targetLanguage, sourceLanguage = 'auto
     }
 
     // Prepare the request URL
-    const url = `${AZURE_TRANSLATOR_ENDPOINT}/translate?api-version=3.0&to=${targetLanguage}`;
-    
-    // Add source language if specified
-    const finalUrl = sourceLanguage !== 'auto' ? `${url}&from=${sourceLanguage}` : url;
+    const url = `${GOOGLE_TRANSLATE_ENDPOINT}?key=${GOOGLE_TRANSLATE_API_KEY}`;
 
-    const response = await fetch(finalUrl, {
+    const requestBody = {
+      q: text,
+      target: targetLanguage,
+      format: 'text'
+    };
+
+    // Add source language if specified (not 'auto')
+    if (sourceLanguage !== 'auto') {
+      requestBody.source = sourceLanguage;
+    }
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Ocp-Apim-Subscription-Key': AZURE_TRANSLATOR_KEY,
-        'Ocp-Apim-Subscription-Region': AZURE_TRANSLATOR_REGION,
-        'X-ClientTraceId': generateUUID(),
       },
-      body: JSON.stringify([
-        {
-          text: text
-        }
-      ])
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
-      throw new Error(`Azure Translator API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Google Translate API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     
-    if (data && data[0] && data[0].translations && data[0].translations[0]) {
+    if (data && data.data && data.data.translations && data.data.translations[0]) {
       return {
-        translatedText: data[0].translations[0].text,
-        detectedLanguage: data[0].detectedLanguage?.language || sourceLanguage,
-        confidence: data[0].detectedLanguage?.score || 1.0,
+        translatedText: data.data.translations[0].translatedText,
+        detectedLanguage: data.data.translations[0].detectedSourceLanguage || sourceLanguage,
+        confidence: 1.0, // Google Translate doesn't provide confidence scores in the same way
       };
     } else {
-      throw new Error('Invalid response from Azure Translator API');
+      throw new Error('Invalid response from Google Translate API');
     }
   } catch (error) {
-    console.error('Azure Translator error:', error);
+    console.error('Google Translate error:', error);
     // Return original text if translation fails
     return {
       translatedText: text,
@@ -168,40 +168,36 @@ export const translateText = async (text, targetLanguage, sourceLanguage = 'auto
   }
 };
 
-// Function to detect language using Azure Translator
+// Function to detect language using Google Translate
 export const detectLanguage = async (text) => {
   try {
     if (!text || text.trim() === '') {
       return { language: 'en', confidence: 0 };
     }
 
-    const url = `${AZURE_TRANSLATOR_ENDPOINT}/detect?api-version=3.0`;
+    const url = `https://translation.googleapis.com/language/translate/v2/detect?key=${GOOGLE_TRANSLATE_API_KEY}`;
     
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Ocp-Apim-Subscription-Key': AZURE_TRANSLATOR_KEY,
-        'Ocp-Apim-Subscription-Region': AZURE_TRANSLATOR_REGION,
-        'X-ClientTraceId': generateUUID(),
       },
-      body: JSON.stringify([
-        {
-          text: text
-        }
-      ])
+      body: JSON.stringify({
+        q: text
+      })
     });
 
     if (!response.ok) {
-      throw new Error(`Azure Translator API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Google Translate API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     
-    if (data && data[0]) {
+    if (data && data.data && data.data.detections && data.data.detections[0] && data.data.detections[0][0]) {
+      const detection = data.data.detections[0][0];
       return {
-        language: data[0].language,
-        confidence: data[0].score || 0,
+        language: detection.language,
+        confidence: detection.confidence || 0,
       };
     } else {
       return { language: 'en', confidence: 0 };
@@ -212,30 +208,29 @@ export const detectLanguage = async (text) => {
   }
 };
 
-// Function to get supported languages from Azure Translator
+// Function to get supported languages from Google Translate
 export const getSupportedLanguages = async () => {
   try {
-    const url = `${AZURE_TRANSLATOR_ENDPOINT}/languages?api-version=3.0&scope=translation`;
+    const url = `https://translation.googleapis.com/language/translate/v2/languages?key=${GOOGLE_TRANSLATE_API_KEY}&target=en`;
     
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'Ocp-Apim-Subscription-Key': AZURE_TRANSLATOR_KEY,
-        'Ocp-Apim-Subscription-Region': AZURE_TRANSLATOR_REGION,
+        'Content-Type': 'application/json',
       }
     });
 
     if (!response.ok) {
-      throw new Error(`Azure Translator API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Google Translate API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     
-    if (data && data.translation) {
-      return Object.entries(data.translation).map(([code, info]) => ({
-        code,
-        name: info.name,
-        nativeName: info.nativeName,
+    if (data && data.data && data.data.languages) {
+      return data.data.languages.map(lang => ({
+        code: lang.language,
+        name: lang.name,
+        nativeName: lang.name, // Google Translate doesn't provide native names in this endpoint
       }));
     } else {
       return getSupportedLanguagesArray(); // Fallback to our predefined list
@@ -265,16 +260,7 @@ export const getSupportedLanguagesArray = () => {
   }));
 };
 
-// Helper function to generate UUID for request tracing
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
-
-// Mock translation function for development/testing (when Azure is not configured)
+// Mock translation function for development/testing (when Google Translate is not configured)
 export const mockTranslateText = async (text, targetLanguage, sourceLanguage = 'auto') => {
   // Simulate API delay
   await new Promise(resolve => setTimeout(resolve, 500));
@@ -390,20 +376,20 @@ export const mockTranslateText = async (text, targetLanguage, sourceLanguage = '
   };
 };
 
-// Export the main translation function (use mock if Azure is not configured)
-const isUsingMock = AZURE_TRANSLATOR_KEY === 'YOUR_AZURE_TRANSLATOR_KEY' || AZURE_TRANSLATOR_KEY === '' || !AZURE_TRANSLATOR_KEY;
+// Export the main translation function (use mock if Google Translate is not configured)
+const isUsingMock = GOOGLE_TRANSLATE_API_KEY === 'YOUR_GOOGLE_TRANSLATE_API_KEY' || GOOGLE_TRANSLATE_API_KEY === '' || !GOOGLE_TRANSLATE_API_KEY;
 console.log('Translation Service Debug:', {
-  hasKey: !!AZURE_TRANSLATOR_KEY,
-  keyLength: AZURE_TRANSLATOR_KEY?.length,
+  hasKey: !!GOOGLE_TRANSLATE_API_KEY,
+  keyLength: GOOGLE_TRANSLATE_API_KEY?.length,
   isUsingMock,
-  region: AZURE_TRANSLATOR_REGION
+  service: 'Google Translate'
 });
 
 export const translateMessage = isUsingMock ? mockTranslateText : translateText;
 
-// Test function to verify Azure Translator is working
+// Test function to verify Google Translate is working
 export const testTranslation = async () => {
-  console.log('Testing Azure Translator...');
+  console.log('Testing Google Translate...');
   try {
     const result = await translateMessage('Hello, how are you?', 'es', 'en');
     console.log('Translation test result:', result);

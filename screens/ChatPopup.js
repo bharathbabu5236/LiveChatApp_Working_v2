@@ -22,6 +22,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const [showLanguageModal, setShowLanguageModal] = useState(false);
     const [supportedLanguages, setSupportedLanguages] = useState([]);
     const [translatedCustomerMessages, setTranslatedCustomerMessages] = useState({});
+    const [translatedBotMessages, setTranslatedBotMessages] = useState({});
     const flatListRef = useRef(null);
 
     // Test translation service on component mount
@@ -53,6 +54,77 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const AGENT_DOCTOR_UID = 'UVGDfqIPKYVblK3OhRfenFa0BVp2';
     const AGENT_PAYMENTS_UID = 'WF7Q4sW6gnMqRRe2KT3igD4yEKn2';
 
+    // Function to translate bot messages to customer's selected language
+    const translateBotMessage = async (messageId, englishText, targetLanguage) => {
+        try {
+            if (targetLanguage === 'en') {
+                // If customer prefers English, no translation needed
+                setTranslatedBotMessages(prev => ({
+                    ...prev,
+                    [messageId]: englishText
+                }));
+                return englishText;
+            }
+
+            console.log(`ChatPopup: Translating bot message "${englishText}" to ${targetLanguage}`);
+            const translation = await translateMessage(englishText, targetLanguage, 'en');
+            console.log(`ChatPopup: Bot message translation result:`, translation);
+            
+            setTranslatedBotMessages(prev => ({
+                ...prev,
+                [messageId]: translation.translatedText
+            }));
+            
+            return translation.translatedText;
+        } catch (error) {
+            console.error('Error translating bot message:', error);
+            return englishText; // Return original text if translation fails
+        }
+    };
+
+    // Function to get bot message in customer's language
+    const getBotMessageInLanguage = (messageId, englishText) => {
+        if (!selectedLanguage || selectedLanguage === 'en') {
+            return englishText;
+        }
+        
+        if (translatedBotMessages[messageId]) {
+            return translatedBotMessages[messageId];
+        }
+        
+        // Quick translations for common placeholders
+        if (messageId === 'placeholder-name' && selectedLanguage === 'es') {
+            return 'Ingresa tu nombre...';
+        }
+        if (messageId === 'placeholder-phone' && selectedLanguage === 'es') {
+            return 'Ingresa tu número de teléfono...';
+        }
+        if (messageId === 'department-instruction' && selectedLanguage === 'es') {
+            return `¡Hola ${customerInfo.name}! Por favor selecciona un departamento para comenzar a chatear con el próximo agente disponible.`;
+        }
+        if (messageId === 'welcome-message' && selectedLanguage === 'es') {
+            return '¡Hola! Bienvenido a HealthBuddy. Estoy aquí para ayudarte a conectarte con nuestro equipo de soporte. Para comenzar, ¿podrías decirme tu nombre?';
+        }
+        if (messageId.includes('bot') && selectedLanguage === 'es') {
+            // Handle dynamic bot messages
+            if (englishText.includes("Nice to meet you") && englishText.includes("What's your phone number")) {
+                const name = englishText.match(/Nice to meet you, (.*?)!/)?.[1] || 'there';
+                return `¡Encantado de conocerte, ${name}! ¿Cuál es tu número de teléfono?`;
+            }
+            if (englishText.includes("Thank you") && englishText.includes("select your preferred language")) {
+                return '¡Gracias! Por favor selecciona tu idioma preferido del menú desplegable en el encabezado de arriba, luego te conectaré con un agente.';
+            }
+            if (englishText.includes("Great! I'll connect you with an agent who speaks")) {
+                const languageName = englishText.match(/speaks (.*?)\./)?.[1] || 'Spanish';
+                return `¡Excelente! Te conectaré con un agente que habla ${languageName}. Ahora, por favor selecciona un departamento:`;
+            }
+        }
+        
+        // Trigger translation if not already translated
+        translateBotMessage(messageId, englishText, selectedLanguage);
+        return englishText; // Return English while translating
+    };
+
     useEffect(() => {
         if (visible && !userType) {
             // Reset state when popup opens
@@ -64,6 +136,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             setSelectedLanguage(null);
             setCustomerInfo({ name: '', phone: '' });
             setBotStep('welcome');
+            setTranslatedBotMessages({});
         }
     }, [visible]);
 
@@ -78,12 +151,20 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             // Start bot flow for customer
             setBotStep('askName');
             // Add initial bot welcome message
+            const welcomeMessageId = 'welcome-message';
+            const welcomeText = 'Hello! Welcome to HealthBuddy. I\'m here to help you connect with our support team. To get started, could you please tell me your name?';
+            
             setMessages([{
-                id: 'welcome-message',
+                id: welcomeMessageId,
                 senderType: 'bot',
-                text: 'Hello! Welcome to HealthBuddy. I\'m here to help you connect with our support team. To get started, could you please tell me your name?',
+                text: welcomeText,
                 timestamp: new Date().toLocaleString(),
             }]);
+            
+            // If language is already selected, translate the welcome message
+            if (selectedLanguage && selectedLanguage !== 'en') {
+                translateBotMessage(welcomeMessageId, welcomeText, selectedLanguage);
+            }
         }
     }, [userType, onClose, onAgentSelect]);
 
@@ -191,12 +272,17 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             setBotStep('departmentSelection');
             // Add bot confirmation message
             setTimeout(() => {
+                const messageId = Date.now().toString() + 'bot';
+                const botText = `Great! I'll connect you with an agent who speaks ${getNativeLanguageName(selectedLanguage)}. Now, please select a department:`;
                 setMessages(prevMessages => [...prevMessages, {
-                    id: Date.now().toString() + 'bot',
+                    id: messageId,
                     senderType: 'bot',
-                    text: `Great! I'll connect you with an agent who speaks ${getNativeLanguageName(selectedLanguage)}. Now, please select a department:`,
+                    text: botText,
                     timestamp: new Date().toLocaleString(),
                 }]);
+                if (selectedLanguage !== 'en') {
+                    translateBotMessage(messageId, botText, selectedLanguage);
+                }
             }, 500);
         }
     }, [selectedLanguage, botStep]);
@@ -204,7 +290,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     // Re-translate customer messages when their language changes
     useEffect(() => {
         if (selectedLanguage && messages.length > 0) {
-            console.log(`ChatPopup: Customer language changed to ${selectedLanguage}, re-translating customer messages`);
+            console.log(`ChatPopup: Customer language changed to ${selectedLanguage}, re-translating messages`);
             messages.forEach(message => {
                 if (message.senderId === userId) {
                     // Translate customer's own messages to their selected language
@@ -212,6 +298,9 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                     if (messageContent) {
                         translateCustomerMessageToDisplayLanguage(message.id, messageContent);
                     }
+                } else if (message.senderType === 'bot') {
+                    // Re-translate bot messages to customer's selected language
+                    translateBotMessage(message.id, message.text, selectedLanguage);
                 }
             });
         }
@@ -326,12 +415,17 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             setInputText('');
             // Simulate bot response
             setTimeout(() => {
+                const messageId = Date.now().toString() + 'bot';
+                const botText = `Nice to meet you, ${inputText.trim()}! What's your phone number?`;
                 setMessages(prevMessages => [...prevMessages, {
-                    id: Date.now().toString() + 'bot',
+                    id: messageId,
                     senderType: 'bot',
-                    text: `Nice to meet you, ${inputText.trim()}! What's your phone number?`,
+                    text: botText,
                     timestamp: new Date().toLocaleString(),
                 }]);
+                if (selectedLanguage !== 'en') {
+                    translateBotMessage(messageId, botText, selectedLanguage);
+                }
             }, 500);
         } else if (botStep === 'askPhone') {
             setCustomerInfo(prev => ({ ...prev, phone: inputText.trim() }));
@@ -339,12 +433,17 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             setInputText('');
             // Simulate bot response
             setTimeout(() => {
+                const messageId = Date.now().toString() + 'bot';
+                const botText = `Thank you! Please select your preferred language from the dropdown in the header above, then I'll connect you with an agent.`;
                 setMessages(prevMessages => [...prevMessages, {
-                    id: Date.now().toString() + 'bot',
+                    id: messageId,
                     senderType: 'bot',
-                    text: `Thank you! Please select your preferred language from the dropdown in the header above, then I'll connect you with an agent.`,
+                    text: botText,
                     timestamp: new Date().toLocaleString(),
                 }]);
+                if (selectedLanguage !== 'en') {
+                    translateBotMessage(messageId, botText, selectedLanguage);
+                }
             }, 500);
         }
     };
@@ -368,12 +467,17 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
         setBotStep('departmentSelection');
         // Add bot confirmation message
         setTimeout(() => {
+            const messageId = Date.now().toString() + 'bot';
+            const botText = `Great! I'll connect you with an agent who speaks ${getNativeLanguageName(language)}. Now, please select a department:`;
             setMessages(prevMessages => [...prevMessages, {
-                id: Date.now().toString() + 'bot',
+                id: messageId,
                 senderType: 'bot',
-                text: `Great! I'll connect you with an agent who speaks ${getNativeLanguageName(language)}. Now, please select a department:`,
+                text: botText,
                 timestamp: new Date().toLocaleString(),
             }]);
+            if (language !== 'en') {
+                translateBotMessage(messageId, botText, language);
+            }
         }, 500);
     };
 
@@ -538,15 +642,23 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                                     <Text style={styles.emptyStateText}>Starting conversation...</Text>
                                 </View>
                             ) : (
-                                messages.map(message => (
-                                    <View key={message.id} style={[
-                                        styles.messageBubble,
-                                        message.senderType === 'user' ? styles.myMessage : styles.botMessage
-                                    ]}>
-                                        <Text style={styles.messageText}>{message.text}</Text>
-                                        <Text style={styles.messageTimestamp}>{message.timestamp}</Text>
-                                    </View>
-                                ))
+                                messages.map(message => {
+                                    // Handle bot message translation
+                                    let messageText = message.text;
+                                    if (message.senderType === 'bot') {
+                                        messageText = getBotMessageInLanguage(message.id, message.text);
+                                    }
+                                    
+                                    return (
+                                        <View key={message.id} style={[
+                                            styles.messageBubble,
+                                            message.senderType === 'user' ? styles.myMessage : styles.botMessage
+                                        ]}>
+                                            <Text style={styles.messageText}>{messageText}</Text>
+                                            <Text style={styles.messageTimestamp}>{message.timestamp}</Text>
+                                        </View>
+                                    );
+                                })
                             )}
                         </View>
                                          </ScrollView>
@@ -558,7 +670,13 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                             style={styles.textInput}
                             value={inputText}
                             onChangeText={setInputText}
-                            placeholder={botStep === 'askName' ? "Enter your name..." : "Enter your phone number..."}
+                            placeholder={
+                                selectedLanguage === 'en' 
+                                    ? (botStep === 'askName' ? "Enter your name..." : "Enter your phone number...")
+                                    : (botStep === 'askName' 
+                                        ? getBotMessageInLanguage('placeholder-name', "Enter your name...")
+                                        : getBotMessageInLanguage('placeholder-phone', "Enter your phone number..."))
+                            }
                             multiline
                             onKeyPress={handleKeyPress}
                         />
@@ -646,37 +764,49 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                         onScroll={handleScroll}
                     >
                         <View style={styles.messagesList}>
-                            {messages.map(message => (
-                                <View key={message.id} style={[
-                                    styles.messageBubble,
-                                    message.senderType === 'user' ? styles.myMessage : styles.botMessage
-                                ]}>
-                                    <Text style={styles.messageText}>{message.text}</Text>
-                                    <Text style={styles.messageTimestamp}>{message.timestamp}</Text>
-                                </View>
-                            ))}
+                            {messages.map(message => {
+                                // Handle bot message translation
+                                let messageText = message.text;
+                                if (message.senderType === 'bot') {
+                                    messageText = getBotMessageInLanguage(message.id, message.text);
+                                }
+                                
+                                return (
+                                    <View key={message.id} style={[
+                                        styles.messageBubble,
+                                        message.senderType === 'user' ? styles.myMessage : styles.botMessage
+                                    ]}>
+                                        <Text style={styles.messageText}>{messageText}</Text>
+                                        <Text style={styles.messageTimestamp}>{message.timestamp}</Text>
+                                    </View>
+                                );
+                            })}
                         </View>
                     </ScrollView>
                     
-                    <Text style={styles.instructionText}>
-                        Hi {customerInfo.name}! Please select a department to start chatting with the next available agent.
-                    </Text>
+                                         <Text style={styles.instructionText}>
+                         {getBotMessageInLanguage('department-instruction', `Hi ${customerInfo.name}! Please select a department to start chatting with the next available agent.`)}
+                     </Text>
                     
-                    <TouchableOpacity
-                        style={styles.departmentButton}
-                        onPress={() => setSelectedDepartment('doctor')}
-                    >
-                        <MaterialIcons name="local-hospital" size={20} color="white" />
-                        <Text style={styles.departmentButtonText}>Doctor Department</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                        style={[styles.departmentButton, styles.paymentsButton]}
-                        onPress={() => setSelectedDepartment('payments')}
-                    >
-                        <MaterialIcons name="payment" size={20} color="white" />
-                        <Text style={styles.departmentButtonText}>Payments Department</Text>
-                    </TouchableOpacity>
+                                         <TouchableOpacity
+                         style={styles.departmentButton}
+                         onPress={() => setSelectedDepartment('doctor')}
+                     >
+                         <MaterialIcons name="local-hospital" size={20} color="white" />
+                         <Text style={styles.departmentButtonText}>
+                             {selectedLanguage === 'es' ? 'Departamento Médico' : 'Doctor Department'}
+                         </Text>
+                     </TouchableOpacity>
+                     
+                     <TouchableOpacity
+                         style={[styles.departmentButton, styles.paymentsButton]}
+                         onPress={() => setSelectedDepartment('payments')}
+                     >
+                         <MaterialIcons name="payment" size={20} color="white" />
+                         <Text style={styles.departmentButtonText}>
+                             {selectedLanguage === 'es' ? 'Departamento de Pagos' : 'Payments Department'}
+                         </Text>
+                     </TouchableOpacity>
                 </View>
                 
                 <View style={styles.popupFooter}>

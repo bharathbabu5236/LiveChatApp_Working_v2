@@ -5,6 +5,8 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons'; // For the chat icon
 import ChatPopup from './ChatPopup';
 import LanguageSelector from '../components/LanguageSelector';
+import TTSSettings from '../components/TTSSettings';
+import SpeakableText from '../components/SpeakableText';
 import { useTranslation } from '../context/TranslationContext';
 
 const { width } = Dimensions.get('window'); // Get screen width for responsive image sizing
@@ -49,8 +51,9 @@ const HomeScreen = () => {
 
     return (
         <View style={styles.container}>
-            {/* Language Selector */}
-            <View style={styles.languageContainer}>
+            {/* Language Selector and TTS Settings */}
+            <View style={styles.topRightControls}>
+                <TTSSettings iconSize={20} />
                 <LanguageSelector />
             </View>
 
@@ -71,10 +74,12 @@ const HomeScreen = () => {
                 onLoad={() => console.log('Logo loaded successfully')}
             />
 
-            <Text style={styles.title}>{t('welcome_title')}</Text>
-            <Text style={styles.description}>
+            <SpeakableText style={styles.title} hoverOptions={{ delay: 300 }}>
+                {t('welcome_title')}
+            </SpeakableText>
+            <SpeakableText style={styles.description} hoverOptions={{ delay: 400 }}>
                 {t('welcome_subtitle')}
-            </Text>
+            </SpeakableText>
 
             {/* Floating Action Button for Chat */}
             <TouchableOpacity
@@ -102,14 +107,18 @@ const HomeScreen = () => {
                             onPress={handleAdminPress}
                         >
                             <MaterialIcons name="admin-panel-settings" size={24} color="#2c3e50" />
-                            <Text style={styles.menuItemText}>{t('admin')}</Text>
+                            <SpeakableText style={styles.menuItemText} hoverOptions={{ delay: 200 }}>
+                                {t('admin')}
+                            </SpeakableText>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.menuItem, styles.lastMenuItem]}
                             onPress={handleReviewsPress}
                         >
                             <MaterialIcons name="rate-review" size={24} color="#2c3e50" />
-                            <Text style={styles.menuItemText}>{t('reviews')}</Text>
+                            <SpeakableText style={styles.menuItemText} hoverOptions={{ delay: 200 }}>
+                                {t('reviews')}
+                            </SpeakableText>
                         </TouchableOpacity>
                     </View>
                 </TouchableOpacity>
@@ -160,11 +169,14 @@ const styles = StyleSheet.create({
         marginBottom: 40,
         paddingHorizontal: 10, // Add some horizontal padding for better readability
     },
-    languageContainer: {
+    topRightControls: {
         position: 'absolute',
         top: 50,
         right: 20,
         zIndex: 1000,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
     },
     menuButton: {
         position: 'absolute',

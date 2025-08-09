@@ -1,5 +1,5 @@
 // LiveChatApp/screens/ReviewsScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -17,7 +17,10 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth, appId } from '../firebaseConfig';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, limit } from 'firebase/firestore';
 import { useTranslation } from '../context/TranslationContext';
+import { useTextToSpeech } from '../context/TextToSpeechContext';
 import LanguageSelector from '../components/LanguageSelector';
+import TTSSettings from '../components/TTSSettings';
+import SpeakableText from '../components/SpeakableText';
 import { translateText } from '../translationService';
 
 const { width } = Dimensions.get('window');
@@ -25,6 +28,8 @@ const { width } = Dimensions.get('window');
 const ReviewsScreen = () => {
     const navigation = useNavigation();
     const { t, currentLanguage } = useTranslation();
+    const { speak, ttsEnabled, ttsRate, ttsPitch, ttsVolume } = useTextToSpeech();
+    const typingTimeoutRef = useRef(null);
     const [reviews, setReviews] = useState([]);
     const [translatedReviews, setTranslatedReviews] = useState({});
     const [newReview, setNewReview] = useState('');
@@ -107,6 +112,15 @@ const ReviewsScreen = () => {
             // Keep sample reviews if Firebase setup fails
             setReviews(sampleReviews);
         }
+    }, []);
+
+    // Cleanup typing timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
+        };
     }, []);
 
     // Translate reviews when language changes
@@ -255,15 +269,14 @@ const ReviewsScreen = () => {
     };
 
     return (
-        <KeyboardAvoidingView 
-            style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
+        <View style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color="#2c3e50" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>{t('customer_reviews')}</Text>
+                <SpeakableText style={styles.headerTitle} hoverOptions={{ delay: 300 }}>
+                    {t('customer_reviews')}
+                </SpeakableText>
                 <View style={styles.headerActions}>
                     {currentLanguage !== 'en' && (
                         <TouchableOpacity 
@@ -278,6 +291,7 @@ const ReviewsScreen = () => {
                             />
                         </TouchableOpacity>
                     )}
+                    <TTSSettings iconSize={18} />
                     <LanguageSelector 
                         buttonStyle={styles.headerLanguageButton}
                         textStyle={styles.headerLanguageText}
@@ -285,10 +299,25 @@ const ReviewsScreen = () => {
                 </View>
             </View>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Add Review Section */}
-                <View style={styles.addReviewSection}>
-                    <Text style={styles.addReviewTitle}>{t('share_experience')}</Text>
+            <KeyboardAvoidingView 
+                style={styles.keyboardContainer}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                <ScrollView 
+                    style={styles.content} 
+                    contentContainerStyle={styles.contentContainer}
+                    showsVerticalScrollIndicator={true}
+                    persistentScrollbar={true}
+                    scrollIndicatorInsets={{ right: 1 }}
+                    indicatorStyle="black"
+                    bounces={true}
+                    alwaysBounceVertical={true}
+                >
+                    {/* Add Review Section */}
+                    <View style={styles.addReviewSection}>
+                        <SpeakableText style={styles.addReviewTitle} hoverOptions={{ delay: 300 }}>
+                            {t('share_experience')}
+                        </SpeakableText>
                     
                     <TextInput
                         style={styles.nameInput}
@@ -299,7 +328,9 @@ const ReviewsScreen = () => {
                     />
 
                     <View style={styles.ratingSection}>
-                        <Text style={styles.ratingLabel}>{t('rate_experience')}</Text>
+                        <SpeakableText style={styles.ratingLabel} hoverOptions={{ delay: 200 }}>
+                            {t('rate_experience')}
+                        </SpeakableText>
                         <View style={styles.ratingStars}>
                             {renderRatingSelector()}
                         </View>
@@ -309,7 +340,20 @@ const ReviewsScreen = () => {
                         style={styles.reviewInput}
                         placeholder={t('write_review')}
                         value={newReview}
-                        onChangeText={setNewReview}
+                        onChangeText={(text) => {
+                            setNewReview(text);
+                            // Read the typed text aloud with a slight delay
+                            if (text.trim() && ttsEnabled) {
+                                clearTimeout(typingTimeoutRef.current);
+                                typingTimeoutRef.current = setTimeout(() => {
+                                    speak(text, { 
+                                        rate: ttsRate * 0.8, // Slightly slower for typing
+                                        pitch: ttsPitch,
+                                        volume: ttsVolume * 0.7 // Slightly quieter for typing
+                                    });
+                                }, 1500); // Wait 1.5 seconds after user stops typing
+                            }
+                        }}
                         multiline
                         numberOfLines={4}
                         maxLength={500}
@@ -327,20 +371,24 @@ const ReviewsScreen = () => {
                             color="white" 
                             style={{ marginRight: 8 }} 
                         />
-                        <Text style={styles.submitButtonText}>
+                        <SpeakableText style={styles.submitButtonText} hoverOptions={{ delay: 200 }}>
                             {loading ? t('submitting') : t('submit_review')}
-                        </Text>
+                        </SpeakableText>
                     </TouchableOpacity>
                 </View>
 
                 {/* Reviews List */}
                 <View style={styles.reviewsSection}>
                     <View style={styles.reviewsSectionHeader}>
-                        <Text style={styles.reviewsSectionTitle}>{t('customer_reviews')} ({reviews.length})</Text>
+                        <SpeakableText style={styles.reviewsSectionTitle} hoverOptions={{ delay: 300 }}>
+                            {t('customer_reviews')} ({reviews.length})
+                        </SpeakableText>
                         {translatingReviews && (
                             <View style={styles.translatingIndicator}>
                                 <MaterialIcons name="translate" size={16} color="#3498db" />
-                                <Text style={styles.translatingText}>{t('translating')}...</Text>
+                                <SpeakableText style={styles.translatingText} hoverOptions={{ delay: 200 }}>
+                                    {t('translating')}...
+                                </SpeakableText>
                             </View>
                         )}
                     </View>
@@ -349,7 +397,7 @@ const ReviewsScreen = () => {
                         <View key={review.id} style={styles.reviewCard}>
                             <View style={styles.reviewHeader}>
                                 <View style={styles.reviewerInfo}>
-                                    <Text style={styles.reviewerName}>
+                                    <SpeakableText style={styles.reviewerName} hoverOptions={{ delay: 200 }}>
                                         {review.name}
                                         {review.verified && (
                                             <MaterialIcons 
@@ -359,29 +407,43 @@ const ReviewsScreen = () => {
                                                 style={{ marginLeft: 4 }} 
                                             />
                                         )}
-                                    </Text>
-                                    <Text style={styles.reviewDate}>{review.date}</Text>
+                                    </SpeakableText>
+                                    <SpeakableText style={styles.reviewDate} hoverOptions={{ delay: 200 }}>
+                                        {review.date}
+                                    </SpeakableText>
                                 </View>
                                 <View style={styles.reviewRating}>
                                     {renderStars(review.rating)}
                                 </View>
                             </View>
-                            <Text style={styles.reviewComment}>
+                            <SpeakableText 
+                                style={styles.reviewComment}
+                                text={currentLanguage !== 'en' && translatedReviews[review.id] 
+                                    ? translatedReviews[review.id] 
+                                    : review.comment}
+                                hoverOptions={{ delay: 400 }}
+                            >
                                 {currentLanguage !== 'en' && translatedReviews[review.id] 
                                     ? translatedReviews[review.id] 
                                     : review.comment}
-                            </Text>
+                            </SpeakableText>
                             {currentLanguage !== 'en' && translatedReviews[review.id] && (
                                 <View style={styles.translationIndicator}>
                                     <MaterialIcons name="translate" size={12} color="#7f8c8d" />
-                                    <Text style={styles.translationIndicatorText}>{t('translated_from_original')}</Text>
+                                    <SpeakableText style={styles.translationIndicatorText} hoverOptions={{ delay: 200 }}>
+                                        {t('translated_from_original')}
+                                    </SpeakableText>
                                 </View>
                             )}
                         </View>
                     ))}
                 </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
+                
+                    {/* Extra spacing for better scrolling */}
+                    <View style={{ height: 100 }} />
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </View>
     );
 };
 
@@ -389,6 +451,9 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f8f9fa',
+    },
+    keyboardContainer: {
+        flex: 1,
     },
     header: {
         flexDirection: 'row',
@@ -435,6 +500,11 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         paddingHorizontal: 20,
+        paddingBottom: 20,
+    },
+    contentContainer: {
+        flexGrow: 1,
+        paddingBottom: 50,
     },
     addReviewSection: {
         backgroundColor: 'white',

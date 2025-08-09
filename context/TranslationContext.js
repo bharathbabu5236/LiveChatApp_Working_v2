@@ -40,6 +40,12 @@ const UI_TRANSLATIONS = {
     'translating': 'Translating',
     'translated_from_original': 'Translated from original language',
     
+    // Language Selection
+    'select_language': 'Select Language',
+    'search_languages': 'Search languages...',
+    'no_languages_found': 'No languages found',
+    'try_different_search': 'Try a different search term',
+    
     // Chat Screen
     'live_chat_support': 'Live Chat Support',
     'type_message': 'Type your message...',
@@ -122,6 +128,24 @@ const UI_TRANSLATIONS = {
     'agent_left': 'Agent left the chat',
     'customer_joined': 'Customer joined the chat',
     'customer_left': 'Customer left the chat',
+    
+    // Text-to-Speech
+    'text_to_speech_settings': 'Text-to-Speech Settings',
+    'enable_text_to_speech': 'Enable Text-to-Speech',
+    'speech_rate': 'Speech Rate',
+    'speech_pitch': 'Speech Pitch',
+    'speech_volume': 'Volume',
+    'slow': 'Slow',
+    'fast': 'Fast',
+    'low': 'Low',
+    'high': 'High',
+    'quiet': 'Quiet',
+    'loud': 'Loud',
+    'test_speech': 'Test Speech',
+    'stop_test': 'Stop Test',
+    'stop': 'Stop',
+    'how_to_use': 'How to Use',
+    'hover_to_speak_instructions': 'Hover your mouse over any text to hear it read aloud. Text will be spoken in your selected language.',
 };
 
 export const TranslationProvider = ({ children }) => {

@@ -4,11 +4,14 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, Modal } fr
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons'; // For the chat icon
 import ChatPopup from './ChatPopup';
+import LanguageSelector from '../components/LanguageSelector';
+import { useTranslation } from '../context/TranslationContext';
 
 const { width } = Dimensions.get('window'); // Get screen width for responsive image sizing
 
 const HomeScreen = () => {
     const navigation = useNavigation();
+    const { t } = useTranslation();
     const [showChatPopup, setShowChatPopup] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
 
@@ -35,12 +38,22 @@ const HomeScreen = () => {
         navigation.navigate('Admin');
     };
 
+    const handleReviewsPress = () => {
+        setShowMenu(false);
+        navigation.navigate('Reviews');
+    };
+
     const handleCloseMenu = () => {
         setShowMenu(false);
     };
 
     return (
         <View style={styles.container}>
+            {/* Language Selector */}
+            <View style={styles.languageContainer}>
+                <LanguageSelector />
+            </View>
+
             {/* Hamburger Menu Button */}
             <TouchableOpacity
                 style={styles.menuButton}
@@ -58,10 +71,9 @@ const HomeScreen = () => {
                 onLoad={() => console.log('Logo loaded successfully')}
             />
 
-            <Text style={styles.title}>Live Best Service</Text>
+            <Text style={styles.title}>{t('welcome_title')}</Text>
             <Text style={styles.description}>
-                Welcome to Live Best Services! We are dedicated to providing you with top-notch healthcare support.
-                Our team is here to assist you with any queries or concerns you may have.
+                {t('welcome_subtitle')}
             </Text>
 
             {/* Floating Action Button for Chat */}
@@ -90,7 +102,14 @@ const HomeScreen = () => {
                             onPress={handleAdminPress}
                         >
                             <MaterialIcons name="admin-panel-settings" size={24} color="#2c3e50" />
-                            <Text style={styles.menuItemText}>Admin</Text>
+                            <Text style={styles.menuItemText}>{t('admin')}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.menuItem, styles.lastMenuItem]}
+                            onPress={handleReviewsPress}
+                        >
+                            <MaterialIcons name="rate-review" size={24} color="#2c3e50" />
+                            <Text style={styles.menuItemText}>{t('reviews')}</Text>
                         </TouchableOpacity>
                     </View>
                 </TouchableOpacity>
@@ -140,6 +159,12 @@ const styles = StyleSheet.create({
         color: '#34495e',
         marginBottom: 40,
         paddingHorizontal: 10, // Add some horizontal padding for better readability
+    },
+    languageContainer: {
+        position: 'absolute',
+        top: 50,
+        right: 20,
+        zIndex: 1000,
     },
     menuButton: {
         position: 'absolute',
@@ -202,6 +227,9 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#2c3e50',
         marginLeft: 12,
+    },
+    lastMenuItem: {
+        borderBottomWidth: 0,
     },
 });
 

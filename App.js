@@ -2,6 +2,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { TranslationProvider } from './context/TranslationContext';
 
 // Import all screens
 import HomeScreen from './screens/HomeScreen';
@@ -11,6 +12,7 @@ import LoginScreen from './screens/LoginScreen';
 import AgentChatListScreen from './screens/AgentChatListScreen';
 import AgentChatScreen from './screens/AgentChatScreen';
 import AdminScreen from './screens/AdminScreen';
+import ReviewsScreen from './screens/ReviewsScreen';
 
 const Stack = createStackNavigator();
 
@@ -54,46 +56,53 @@ const AgentStack = () => (
 // Main App component with full navigation
 export default function App() {
   return (
-    <NavigationContainer
-      onReady={() => {
-        console.log('LiveChatApp: Navigation container is ready');
-      }}
-      onStateChange={(state) => {
-        console.log('LiveChatApp: Navigation state changed:', state);
-      }}
-    >
-      <Stack.Navigator 
-        initialRouteName="Home"
-        screenOptions={{
-          headerShown: false,
+    <TranslationProvider>
+      <NavigationContainer
+        onReady={() => {
+          console.log('LiveChatApp: Navigation container is ready');
+        }}
+        onStateChange={(state) => {
+          console.log('LiveChatApp: Navigation state changed:', state);
         }}
       >
-        <Stack.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="InitialChoice"
-          component={InitialChoiceScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="CustomerStack"
-          component={CustomerStack}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="AgentStack"
-          component={AgentStack}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Admin"
-          component={AdminScreen}
-          options={{ headerShown: false }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+        <Stack.Navigator 
+          initialRouteName="Home"
+          screenOptions={{
+            headerShown: false,
+          }}
+        >
+          <Stack.Screen
+            name="Home"
+            component={HomeScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="InitialChoice"
+            component={InitialChoiceScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="CustomerStack"
+            component={CustomerStack}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="AgentStack"
+            component={AgentStack}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Admin"
+            component={AdminScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Reviews"
+            component={ReviewsScreen}
+            options={{ headerShown: false }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </TranslationProvider>
   );
 }

@@ -120,6 +120,47 @@ export const TextToSpeechProvider = ({ children }) => {
         return languageMap[language] || { code: 'en-US', voice: 'en-US-Neural2-D' };
     };
 
+    // Helper function to split text into chunks under byte limit
+    const splitTextIntoChunks = (text, maxBytes = 4800) => {
+        const chunks = [];
+        const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        let currentChunk = '';
+        
+        for (const sentence of sentences) {
+            const testChunk = currentChunk ? `${currentChunk}. ${sentence.trim()}` : sentence.trim();
+            
+            // Check if adding this sentence would exceed the byte limit
+            if (new TextEncoder().encode(testChunk).length > maxBytes) {
+                if (currentChunk) {
+                    chunks.push(currentChunk.trim());
+                    currentChunk = sentence.trim();
+                } else {
+                    // Single sentence is too long, split by words
+                    const words = sentence.trim().split(' ');
+                    let wordChunk = '';
+                    for (const word of words) {
+                        const testWordChunk = wordChunk ? `${wordChunk} ${word}` : word;
+                        if (new TextEncoder().encode(testWordChunk).length > maxBytes) {
+                            if (wordChunk) chunks.push(wordChunk.trim());
+                            wordChunk = word;
+                        } else {
+                            wordChunk = testWordChunk;
+                        }
+                    }
+                    if (wordChunk) currentChunk = wordChunk;
+                }
+            } else {
+                currentChunk = testChunk;
+            }
+        }
+        
+        if (currentChunk) {
+            chunks.push(currentChunk.trim());
+        }
+        
+        return chunks.filter(chunk => chunk.length > 0);
+    };
+
     // Google Cloud Text-to-Speech API function
     const synthesizeWithGoogleTTS = async (text, languageInfo) => {
         if (!GOOGLE_TTS_CONFIG.ENABLED || !GOOGLE_TTS_CONFIG.API_KEY || GOOGLE_TTS_CONFIG.API_KEY === 'YOUR_ACTUAL_API_KEY_HERE') {
@@ -127,9 +168,16 @@ export const TextToSpeechProvider = ({ children }) => {
             return null;
         }
 
+        console.log('🔊 Google TTS: Starting synthesis...', {
+            text: text.substring(0, 50) + '...',
+            language: languageInfo.code,
+            voice: languageInfo.voice
+        });
+
         // Check cache first
         const cacheKey = `${text}-${languageInfo.code}-${languageInfo.voice}`;
         if (audioCache.has(cacheKey)) {
+            console.log('🔊 Google TTS: Using cached audio');
             return audioCache.get(cacheKey);
         }
 
@@ -156,21 +204,54 @@ export const TextToSpeechProvider = ({ children }) => {
                 body: JSON.stringify(requestBody)
             });
 
+            console.log('🔊 Google TTS: API Response Status:', response.status);
+
             if (!response.ok) {
-                throw new Error(`Google TTS API error: ${response.status}`);
+                const errorText = await response.text();
+                console.error('🔊 Google TTS: API Error Details:', errorText);
+                throw new Error(`Google TTS API error: ${response.status} - ${errorText}`);
             }
 
             const data = await response.json();
             const audioContent = data.audioContent;
+
+            console.log('🔊 Google TTS: Successfully received audio content');
 
             // Cache the result
             audioCache.set(cacheKey, audioContent);
 
             return audioContent;
         } catch (error) {
-            console.error('Google TTS API error:', error);
+            console.error('🔊 Google TTS: API error details:', {
+                message: error.message,
+                stack: error.stack
+            });
             return null;
         }
+    };
+
+    // Play multiple audio chunks sequentially
+    const playAudioChunks = async (audioChunks) => {
+        setIsReading(true);
+        
+        for (let i = 0; i < audioChunks.length; i++) {
+            console.log(`🔊 Google TTS: Playing chunk ${i + 1} of ${audioChunks.length}`);
+            
+            try {
+                await playAudioFromBase64(audioChunks[i]);
+                
+                // Small pause between chunks for natural flow
+                if (i < audioChunks.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            } catch (error) {
+                console.error(`🔊 Google TTS: Error playing chunk ${i + 1}:`, error);
+                // Continue with next chunk
+            }
+        }
+        
+        setIsReading(false);
+        setCurrentUtterance(null);
     };
 
     // Play audio from base64 content
@@ -244,17 +325,53 @@ export const TextToSpeechProvider = ({ children }) => {
         try {
             // Try Google TTS first
             if (useGoogleTTS) {
-                console.log(`Attempting Google TTS for language: ${currentLanguage} (${languageInfo.code})`);
-                const audioContent = await synthesizeWithGoogleTTS(text.trim(), languageInfo);
+                console.log(`🔊 Attempting Google TTS for language: ${currentLanguage} (${languageInfo.code})`);
                 
-                if (audioContent) {
-                    await playAudioFromBase64(audioContent);
-                    return;
+                // Check text length and split if necessary
+                const textBytes = new TextEncoder().encode(text.trim()).length;
+                console.log(`🔊 Google TTS: Text length: ${textBytes} bytes`);
+                
+                if (textBytes > 4800) {
+                    console.log('🔊 Google TTS: Text too long, splitting into chunks...');
+                    const chunks = splitTextIntoChunks(text.trim());
+                    console.log(`🔊 Google TTS: Split into ${chunks.length} chunks`);
+                    
+                    const audioChunks = [];
+                    
+                    for (let i = 0; i < chunks.length; i++) {
+                        console.log(`🔊 Google TTS: Processing chunk ${i + 1}: "${chunks[i].substring(0, 50)}..."`);
+                        const audioContent = await synthesizeWithGoogleTTS(chunks[i], languageInfo);
+                        
+                        if (audioContent) {
+                            audioChunks.push(audioContent);
+                        } else {
+                            console.warn(`🔊 Google TTS: Failed to synthesize chunk ${i + 1}, falling back to browser TTS`);
+                            await speakWithBrowserTTS(text, options, languageInfo);
+                            return;
+                        }
+                    }
+                    
+                    if (audioChunks.length > 0) {
+                        console.log(`🔊 Google TTS: Playing ${audioChunks.length} audio chunks`);
+                        await playAudioChunks(audioChunks);
+                        return;
+                    }
+                } else {
+                    // Text is short enough for single request
+                    const audioContent = await synthesizeWithGoogleTTS(text.trim(), languageInfo);
+                    
+                    if (audioContent) {
+                        console.log('🔊 Google TTS: Playing single audio content');
+                        await playAudioFromBase64(audioContent);
+                        return;
+                    } else {
+                        console.warn('🔊 Google TTS: No audio content received, falling back to browser TTS');
+                    }
                 }
             }
 
             // Fallback to browser TTS
-            console.log(`Using browser TTS for language: ${currentLanguage}`);
+            console.log(`🔊 Using browser TTS for language: ${currentLanguage}`);
             await speakWithBrowserTTS(text, options, languageInfo);
 
         } catch (error) {

@@ -7,6 +7,7 @@ export const GOOGLE_TTS_CONFIG = {
     API_KEY: 'AIzaSyBU4mlwG3hMan-yPDFtbpaT2gnh5Xo6nqI',
     ENDPOINT: 'https://texttospeech.googleapis.com/v1/text:synthesize',
     ENABLED: true, // Google TTS enabled for premium voices
+    DEBUG: true, // Enable debug logging
 };
 
 // Instructions:

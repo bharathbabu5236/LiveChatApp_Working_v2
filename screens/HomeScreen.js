@@ -15,10 +15,11 @@ const { width } = Dimensions.get('window'); // Get screen width for responsive i
 const HomeScreen = () => {
     const navigation = useNavigation();
     const { t } = useTranslation();
-    const { initializeAudioPermissions } = useTextToSpeech();
+    const { initializeAudioPermissions, speak, stopSpeech } = useTextToSpeech();
     const [showChatPopup, setShowChatPopup] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [audioInitialized, setAudioInitialized] = useState(false);
+    const [isReading, setIsReading] = useState(false);
 
     useEffect(() => {
         console.log('HomeScreen mounted');
@@ -57,6 +58,44 @@ const HomeScreen = () => {
         setShowMenu(false);
     };
 
+    const handleReadPage = async () => {
+        console.log('🔊 Volume button clicked! isReading:', isReading);
+        
+        if (!audioInitialized) {
+            console.log('🔊 Initializing audio permissions...');
+            initializeAudioPermissions();
+            setAudioInitialized(true);
+        }
+
+        if (isReading) {
+            // Stop reading
+            console.log('🔊 Stopping speech...');
+            stopSpeech();
+            setIsReading(false);
+        } else {
+            // Start reading the entire page
+            console.log('🔊 Starting to read page...');
+            setIsReading(true);
+            
+            const pageContent = [
+                t('welcome_title'),
+                t('welcome_subtitle'),
+                t('care_services_title'),
+                t('care_services_description')
+            ].join('. ');
+
+            console.log('🔊 Page content to read:', pageContent.substring(0, 100) + '...');
+
+            try {
+                await speak(pageContent);
+                setIsReading(false);
+            } catch (error) {
+                console.error('🔊 Error reading page:', error);
+                setIsReading(false);
+            }
+        }
+    };
+
     return (
         <ScrollView 
             style={styles.scrollContainer} 
@@ -65,9 +104,18 @@ const HomeScreen = () => {
             showsHorizontalScrollIndicator={false}
             indicatorStyle="default"
         >
-            {/* Language Selector and TTS Settings */}
+            {/* Language Selector and Volume Button */}
             <View style={styles.topRightControls}>
-                <TTSSettings iconSize={20} />
+                <TouchableOpacity
+                    style={[styles.volumeButton, isReading && styles.volumeButtonActive]}
+                    onPress={handleReadPage}
+                >
+                    <MaterialIcons 
+                        name={isReading ? "volume_off" : "volume_up"} 
+                        size={24} 
+                        color={isReading ? "#e74c3c" : "#2c3e50"} 
+                    />
+                </TouchableOpacity>
                 <LanguageSelector />
             </View>
 
@@ -88,52 +136,23 @@ const HomeScreen = () => {
                 onLoad={() => console.log('Logo loaded successfully')}
             />
 
-            <SpeakableText style={styles.title} hoverOptions={{ delay: 300 }}>
+            <Text style={styles.title}>
                 {t('welcome_title')}
-            </SpeakableText>
-            <SpeakableText style={styles.description} hoverOptions={{ delay: 400 }}>
+            </Text>
+            <Text style={styles.description}>
                 {t('welcome_subtitle')}
-            </SpeakableText>
+            </Text>
 
             {/* Care Services Content */}
             <View style={styles.servicesContainer}>
-                {/* Personal Care Section */}
+                {/* Single Comprehensive Care Services Section */}
                 <View style={styles.serviceSection}>
-                    <SpeakableText style={styles.serviceTitle} hoverOptions={{ delay: 300 }}>
-                        {t('personal_care_title')}
-                    </SpeakableText>
-                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
-                        {t('personal_care_description')}
-                    </SpeakableText>
-                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
-                        {t('personal_care_mobility')}
-                    </SpeakableText>
-                </View>
-
-                {/* Companionship Section */}
-                <View style={styles.serviceSection}>
-                    <SpeakableText style={styles.serviceTitle} hoverOptions={{ delay: 300 }}>
-                        {t('companionship_title')}
-                    </SpeakableText>
-                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
-                        {t('companionship_description')}
-                    </SpeakableText>
-                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
-                        {t('companionship_support')}
-                    </SpeakableText>
-                </View>
-
-                {/* Medication Reminders Section */}
-                <View style={styles.serviceSection}>
-                    <SpeakableText style={styles.serviceTitle} hoverOptions={{ delay: 300 }}>
-                        {t('medication_title')}
-                    </SpeakableText>
-                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
-                        {t('medication_description')}
-                    </SpeakableText>
-                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
-                        {t('medication_monitoring')}
-                    </SpeakableText>
+                    <Text style={styles.serviceTitle}>
+                        {t('care_services_title')}
+                    </Text>
+                    <Text style={styles.serviceDescription}>
+                        {t('care_services_description')}
+                    </Text>
                 </View>
             </View>
 
@@ -163,18 +182,18 @@ const HomeScreen = () => {
                             onPress={handleAdminPress}
                         >
                             <MaterialIcons name="admin-panel-settings" size={24} color="#2c3e50" />
-                            <SpeakableText style={styles.menuItemText} hoverOptions={{ delay: 200 }}>
+                            <Text style={styles.menuItemText}>
                                 {t('admin')}
-                            </SpeakableText>
+                            </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.menuItem, styles.lastMenuItem]}
                             onPress={handleReviewsPress}
                         >
                             <MaterialIcons name="rate-review" size={24} color="#2c3e50" />
-                            <SpeakableText style={styles.menuItemText} hoverOptions={{ delay: 200 }}>
+                            <Text style={styles.menuItemText}>
                                 {t('reviews')}
-                            </SpeakableText>
+                            </Text>
                         </TouchableOpacity>
                     </View>
                 </TouchableOpacity>
@@ -268,6 +287,21 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
+    },
+    volumeButton: {
+        padding: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        borderRadius: 8,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+    },
+    volumeButtonActive: {
+        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+        borderWidth: 2,
+        borderColor: '#e74c3c',
     },
     menuButton: {
         position: 'absolute',

@@ -14,7 +14,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useTextToSpeech } from '../context/TextToSpeechContext';
 import { useTranslation } from '../context/TranslationContext';
 
-const TTSSettings = ({ buttonStyle, iconColor = '#2c3e50', iconSize = 24 }) => {
+const TTSSettings = ({ buttonStyle, iconColor = '#2c3e50', iconSize = 24, iconName = 'settings' }) => {
     const [showModal, setShowModal] = useState(false);
     const {
         isEnabled,
@@ -50,9 +50,9 @@ const TTSSettings = ({ buttonStyle, iconColor = '#2c3e50', iconSize = 24 }) => {
                 onPress={() => setShowModal(true)}
             >
                 <MaterialIcons 
-                    name={isEnabled ? "volume-up" : "volume-off"} 
+                    name={iconName} 
                     size={iconSize} 
-                    color={isEnabled ? iconColor : '#bdc3c7'} 
+                    color={iconColor} 
                 />
             </TouchableOpacity>
 

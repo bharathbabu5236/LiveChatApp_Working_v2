@@ -1,6 +1,6 @@
 // LiveChatApp/screens/HomeScreen.js
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, Modal, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons'; // For the chat icon
 import ChatPopup from './ChatPopup';
@@ -8,14 +8,17 @@ import LanguageSelector from '../components/LanguageSelector';
 import TTSSettings from '../components/TTSSettings';
 import SpeakableText from '../components/SpeakableText';
 import { useTranslation } from '../context/TranslationContext';
+import { useTextToSpeech } from '../context/TextToSpeechContext';
 
 const { width } = Dimensions.get('window'); // Get screen width for responsive image sizing
 
 const HomeScreen = () => {
     const navigation = useNavigation();
     const { t } = useTranslation();
+    const { initializeAudioPermissions } = useTextToSpeech();
     const [showChatPopup, setShowChatPopup] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [audioInitialized, setAudioInitialized] = useState(false);
 
     useEffect(() => {
         console.log('HomeScreen mounted');
@@ -23,6 +26,11 @@ const HomeScreen = () => {
 
     const handleChatPress = () => {
         console.log('Chat button pressed, opening chat popup');
+        // Initialize audio permissions on first user interaction
+        if (!audioInitialized) {
+            initializeAudioPermissions();
+            setAudioInitialized(true);
+        }
         setShowChatPopup(true);
     };
 
@@ -50,7 +58,13 @@ const HomeScreen = () => {
     };
 
     return (
-        <View style={styles.container}>
+        <ScrollView 
+            style={styles.scrollContainer} 
+            contentContainerStyle={styles.container}
+            showsVerticalScrollIndicator={true}
+            showsHorizontalScrollIndicator={false}
+            indicatorStyle="default"
+        >
             {/* Language Selector and TTS Settings */}
             <View style={styles.topRightControls}>
                 <TTSSettings iconSize={20} />
@@ -67,9 +81,9 @@ const HomeScreen = () => {
 
             {/* Live Base Services Logo */}
             <Image
-                source={{ uri: 'https://placehold.co/300x150/007bff/ffffff?text=Live+Best+Service' }} // Placeholder logo URL
+                source={require('../lbs_header_logo2.png')} // LBS header logo
                 style={styles.logo}
-                resizeMode="contain" // Ensures the entire logo is visible within its bounds
+                resizeMode="contain" // Changed back to contain for logo display
                 onError={(error) => console.error('Image loading error:', error)}
                 onLoad={() => console.log('Logo loaded successfully')}
             />
@@ -80,6 +94,48 @@ const HomeScreen = () => {
             <SpeakableText style={styles.description} hoverOptions={{ delay: 400 }}>
                 {t('welcome_subtitle')}
             </SpeakableText>
+
+            {/* Care Services Content */}
+            <View style={styles.servicesContainer}>
+                {/* Personal Care Section */}
+                <View style={styles.serviceSection}>
+                    <SpeakableText style={styles.serviceTitle} hoverOptions={{ delay: 300 }}>
+                        {t('personal_care_title')}
+                    </SpeakableText>
+                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
+                        {t('personal_care_description')}
+                    </SpeakableText>
+                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
+                        {t('personal_care_mobility')}
+                    </SpeakableText>
+                </View>
+
+                {/* Companionship Section */}
+                <View style={styles.serviceSection}>
+                    <SpeakableText style={styles.serviceTitle} hoverOptions={{ delay: 300 }}>
+                        {t('companionship_title')}
+                    </SpeakableText>
+                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
+                        {t('companionship_description')}
+                    </SpeakableText>
+                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
+                        {t('companionship_support')}
+                    </SpeakableText>
+                </View>
+
+                {/* Medication Reminders Section */}
+                <View style={styles.serviceSection}>
+                    <SpeakableText style={styles.serviceTitle} hoverOptions={{ delay: 300 }}>
+                        {t('medication_title')}
+                    </SpeakableText>
+                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
+                        {t('medication_description')}
+                    </SpeakableText>
+                    <SpeakableText style={styles.serviceDescription} hoverOptions={{ delay: 400 }}>
+                        {t('medication_monitoring')}
+                    </SpeakableText>
+                </View>
+            </View>
 
             {/* Floating Action Button for Chat */}
             <TouchableOpacity
@@ -130,44 +186,79 @@ const HomeScreen = () => {
                 onClose={() => setShowChatPopup(false)} 
                 onAgentSelect={handleAgentSelect}
             />
-        </View>
+        </ScrollView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
+    scrollContainer: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
         backgroundColor: '#f0f4f8', // Light background
     },
+    container: {
+        flexGrow: 1,
+        alignItems: 'center',
+        padding: 20,
+        paddingTop: 100, // Account for top controls
+        paddingBottom: 100, // Account for floating chat button
+    },
     logo: {
-        width: width * 0.7, // 70% of screen width for responsiveness
-        height: width * 0.35, // Maintain aspect ratio (e.g., if logo is 300x150)
-        marginBottom: 30,
-        borderRadius: 15, // Rounded corners for the logo container
-        overflow: 'hidden', // Ensures content respects border radius
-        shadowColor: '#000', // iOS shadow
-        shadowOffset: { width: 0, height: 5 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 10, // Android shadow
+        width: width * 0.4, // Reduced from 0.7 to 0.4 (40% of screen width)
+        height: width * 0.2, // Reduced from 0.35 to 0.2 (maintain aspect ratio)
+        marginBottom: 20, // Reduced margin
+        borderRadius: 10, // Slightly smaller border radius
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+        elevation: 6,
     },
     title: {
-        fontSize: 28,
+        fontSize: 24, // Slightly smaller
         fontWeight: 'bold',
-        marginBottom: 20,
-        color: '#2c3e50', // Dark text
+        marginBottom: 15,
+        color: '#2c3e50',
         textAlign: 'center',
     },
     description: {
-        fontSize: 16,
+        fontSize: 14, // Slightly smaller
         textAlign: 'center',
-        lineHeight: 24,
+        lineHeight: 20,
         color: '#34495e',
-        marginBottom: 40,
-        paddingHorizontal: 10, // Add some horizontal padding for better readability
+        marginBottom: 30,
+        paddingHorizontal: 10,
+    },
+    servicesContainer: {
+        width: '100%',
+        maxWidth: 800, // Limit width on larger screens
+    },
+    serviceSection: {
+        backgroundColor: '#ffffff',
+        borderRadius: 12,
+        padding: 20,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+        borderLeftWidth: 4,
+        borderLeftColor: '#3498db', // Blue accent
+    },
+    serviceTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#2c3e50',
+        marginBottom: 12,
+        textAlign: 'left',
+    },
+    serviceDescription: {
+        fontSize: 14,
+        lineHeight: 22,
+        color: '#5a6c7d',
+        marginBottom: 10,
+        textAlign: 'left',
     },
     topRightControls: {
         position: 'absolute',
@@ -196,14 +287,14 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 30,
         right: 30,
-        backgroundColor: '#2ecc71', // Green chat button
+        backgroundColor: '#2ecc71',
         width: 60,
         height: 60,
         borderRadius: 30,
         justifyContent: 'center',
         alignItems: 'center',
-        elevation: 8, // Android shadow
-        shadowColor: '#000', // iOS shadow
+        elevation: 8,
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 5,

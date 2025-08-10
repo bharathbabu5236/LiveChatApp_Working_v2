@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from './TranslationContext';
+import GOOGLE_TTS_CONFIG from '../config/ttsConfig';
 
 const TextToSpeechContext = createContext();
 
@@ -20,6 +21,8 @@ export const TextToSpeechProvider = ({ children }) => {
     const [speechPitch, setSpeechPitch] = useState(1.0);
     const [speechVolume, setSpeechVolume] = useState(1.0);
     const [currentUtterance, setCurrentUtterance] = useState(null);
+    const [useGoogleTTS, setUseGoogleTTS] = useState(true); // Enable Google TTS for premium voices
+    const [audioCache, setAudioCache] = useState(new Map()); // Cache audio files
     const { currentLanguage } = useTranslation();
 
     // Load TTS preferences
@@ -65,58 +68,143 @@ export const TextToSpeechProvider = ({ children }) => {
     }, [isEnabled, speechRate, speechPitch, speechVolume]);
 
     const getLanguageCode = (language) => {
-        // Map common language codes to speech synthesis language codes
+        // Google Cloud TTS language codes with voice names
         const languageMap = {
-            'en': 'en-US',
-            'es': 'es-ES',
-            'fr': 'fr-FR',
-            'de': 'de-DE',
-            'it': 'it-IT',
-            'pt': 'pt-PT',
-            'ru': 'ru-RU',
-            'zh': 'zh-CN',
-            'ja': 'ja-JP',
-            'ko': 'ko-KR',
-            'ar': 'ar-SA',
-            'hi': 'hi-IN',
-            'te': 'te-IN', // Telugu
-            'ta': 'ta-IN', // Tamil
-            'ml': 'ml-IN', // Malayalam
-            'kn': 'kn-IN', // Kannada
-            'gu': 'gu-IN', // Gujarati
-            'mr': 'mr-IN', // Marathi
-            'pa': 'pa-IN', // Punjabi
-            'or': 'or-IN', // Odia
-            'as': 'as-IN', // Assamese
-            'tr': 'tr-TR',
-            'nl': 'nl-NL',
-            'sv': 'sv-SE',
-            'da': 'da-DK',
-            'no': 'nb-NO',
-            'fi': 'fi-FI',
-            'pl': 'pl-PL',
-            'cs': 'cs-CZ',
-            'hu': 'hu-HU',
-            'ro': 'ro-RO',
-            'bg': 'bg-BG',
-            'hr': 'hr-HR',
-            'sk': 'sk-SK',
-            'sl': 'sl-SI',
-            'et': 'et-EE',
-            'lv': 'lv-LV',
-            'lt': 'lt-LT',
-            'el': 'el-GR',
-            'he': 'he-IL',
-            'th': 'th-TH',
-            'vi': 'vi-VN',
-            'id': 'id-ID',
-            'ms': 'ms-MY',
-            'bn': 'bn-BD',
-            'ur': 'ur-PK',
-            'fa': 'fa-IR',
-            'sw': 'sw-KE',
+            'en': { code: 'en-US', voice: 'en-US-Neural2-D' },
+            'es': { code: 'es-ES', voice: 'es-ES-Neural2-B' },
+            'fr': { code: 'fr-FR', voice: 'fr-FR-Neural2-B' },
+            'de': { code: 'de-DE', voice: 'de-DE-Neural2-B' },
+            'it': { code: 'it-IT', voice: 'it-IT-Neural2-A' },
+            'pt': { code: 'pt-PT', voice: 'pt-PT-Wavenet-A' },
+            'ru': { code: 'ru-RU', voice: 'ru-RU-Wavenet-A' },
+            'zh': { code: 'zh-CN', voice: 'zh-CN-Wavenet-A' },
+            'ja': { code: 'ja-JP', voice: 'ja-JP-Neural2-B' },
+            'ko': { code: 'ko-KR', voice: 'ko-KR-Neural2-A' },
+            'ar': { code: 'ar-XA', voice: 'ar-XA-Wavenet-A' },
+            'hi': { code: 'hi-IN', voice: 'hi-IN-Neural2-A' },
+            'te': { code: 'te-IN', voice: 'te-IN-Standard-A' }, // Telugu
+            'ta': { code: 'ta-IN', voice: 'ta-IN-Wavenet-A' }, // Tamil
+            'ml': { code: 'ml-IN', voice: 'ml-IN-Wavenet-A' }, // Malayalam
+            'kn': { code: 'kn-IN', voice: 'kn-IN-Wavenet-A' }, // Kannada
+            'gu': { code: 'gu-IN', voice: 'gu-IN-Wavenet-A' }, // Gujarati
+            'mr': { code: 'mr-IN', voice: 'mr-IN-Wavenet-A' }, // Marathi
+            'pa': { code: 'pa-IN', voice: 'pa-IN-Wavenet-A' }, // Punjabi
+            'bn': { code: 'bn-IN', voice: 'bn-IN-Wavenet-A' }, // Bengali
+            'tr': { code: 'tr-TR', voice: 'tr-TR-Wavenet-A' },
+            'nl': { code: 'nl-NL', voice: 'nl-NL-Wavenet-A' },
+            'sv': { code: 'sv-SE', voice: 'sv-SE-Wavenet-A' },
+            'da': { code: 'da-DK', voice: 'da-DK-Wavenet-A' },
+            'no': { code: 'nb-NO', voice: 'nb-NO-Wavenet-A' },
+            'fi': { code: 'fi-FI', voice: 'fi-FI-Wavenet-A' },
+            'pl': { code: 'pl-PL', voice: 'pl-PL-Wavenet-A' },
+            'cs': { code: 'cs-CZ', voice: 'cs-CZ-Wavenet-A' },
+            'hu': { code: 'hu-HU', voice: 'hu-HU-Wavenet-A' },
+            'ro': { code: 'ro-RO', voice: 'ro-RO-Wavenet-A' },
+            'bg': { code: 'bg-BG', voice: 'bg-BG-Standard-A' },
+            'hr': { code: 'hr-HR', voice: 'hr-HR-Wavenet-A' },
+            'sk': { code: 'sk-SK', voice: 'sk-SK-Wavenet-A' },
+            'sl': { code: 'sl-SI', voice: 'sl-SI-Wavenet-A' },
+            'et': { code: 'et-EE', voice: 'et-EE-Standard-A' },
+            'lv': { code: 'lv-LV', voice: 'lv-LV-Standard-A' },
+            'lt': { code: 'lt-LT', voice: 'lt-LT-Standard-A' },
+            'el': { code: 'el-GR', voice: 'el-GR-Wavenet-A' },
+            'he': { code: 'he-IL', voice: 'he-IL-Wavenet-A' },
+            'th': { code: 'th-TH', voice: 'th-TH-Neural2-C' },
+            'vi': { code: 'vi-VN', voice: 'vi-VN-Neural2-A' },
+            'id': { code: 'id-ID', voice: 'id-ID-Wavenet-A' },
+            'ms': { code: 'ms-MY', voice: 'ms-MY-Wavenet-A' },
+            'ur': { code: 'ur-IN', voice: 'ur-IN-Wavenet-A' },
+            'fa': { code: 'fa-IR', voice: 'fa-IR-Standard-A' },
+            'sw': { code: 'sw-KE', voice: 'sw-KE-Wavenet-A' },
         };
-        return languageMap[language] || 'en-US';
+        return languageMap[language] || { code: 'en-US', voice: 'en-US-Neural2-D' };
+    };
+
+    // Google Cloud Text-to-Speech API function
+    const synthesizeWithGoogleTTS = async (text, languageInfo) => {
+        if (!GOOGLE_TTS_CONFIG.ENABLED || !GOOGLE_TTS_CONFIG.API_KEY || GOOGLE_TTS_CONFIG.API_KEY === 'YOUR_ACTUAL_API_KEY_HERE') {
+            console.warn('Google TTS API not configured. Falling back to browser TTS.');
+            return null;
+        }
+
+        // Check cache first
+        const cacheKey = `${text}-${languageInfo.code}-${languageInfo.voice}`;
+        if (audioCache.has(cacheKey)) {
+            return audioCache.get(cacheKey);
+        }
+
+        try {
+            const requestBody = {
+                input: { text: text },
+                voice: {
+                    languageCode: languageInfo.code,
+                    name: languageInfo.voice,
+                },
+                audioConfig: {
+                    audioEncoding: 'MP3',
+                    speakingRate: speechRate,
+                    pitch: (speechPitch - 1) * 20, // Convert to Google's range (-20 to 20)
+                    volumeGainDb: (speechVolume - 1) * 16, // Convert to dB range
+                }
+            };
+
+            const response = await fetch(`${GOOGLE_TTS_CONFIG.ENDPOINT}?key=${GOOGLE_TTS_CONFIG.API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Google TTS API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const audioContent = data.audioContent;
+
+            // Cache the result
+            audioCache.set(cacheKey, audioContent);
+
+            return audioContent;
+        } catch (error) {
+            console.error('Google TTS API error:', error);
+            return null;
+        }
+    };
+
+    // Play audio from base64 content
+    const playAudioFromBase64 = (audioContent) => {
+        return new Promise((resolve, reject) => {
+            try {
+                const audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
+                
+                audio.onloadstart = () => {
+                    setIsReading(true);
+                    console.log('Google TTS: Started playing audio');
+                };
+
+                audio.onended = () => {
+                    setIsReading(false);
+                    setCurrentUtterance(null);
+                    console.log('Google TTS: Finished playing audio');
+                    resolve();
+                };
+
+                audio.onerror = (error) => {
+                    setIsReading(false);
+                    setCurrentUtterance(null);
+                    console.error('Audio playback error:', error);
+                    reject(error);
+                };
+
+                audio.volume = speechVolume;
+                audio.play();
+                setCurrentUtterance(audio);
+            } catch (error) {
+                reject(error);
+            }
+        });
     };
 
     // Helper function to check available voices for a language
@@ -133,134 +221,171 @@ export const TextToSpeechProvider = ({ children }) => {
         );
     };
 
-    const speak = (text, options = {}) => {
+    // Initialize audio permissions with user interaction
+    const initializeAudioPermissions = () => {
+        if (window.speechSynthesis) {
+            // Create a short, silent utterance to initialize permissions
+            const testUtterance = new SpeechSynthesisUtterance(' ');
+            testUtterance.volume = 0.01;
+            testUtterance.rate = 10;
+            window.speechSynthesis.speak(testUtterance);
+            console.log('TTS: Audio permissions initialized');
+        }
+    };
+
+    const speak = async (text, options = {}) => {
         if (!isEnabled || !text?.trim()) return;
 
         // Stop any current speech
         stopSpeech();
 
-        // Check if browser supports speech synthesis
-        if (!window.speechSynthesis) {
-            console.warn('Speech synthesis not supported in this browser');
-            return;
-        }
-
+        const languageInfo = getLanguageCode(currentLanguage);
+        
         try {
-            const utterance = new SpeechSynthesisUtterance(text.trim());
-            
-            // Set speech parameters
-            utterance.rate = options.rate || speechRate;
-            utterance.pitch = options.pitch || speechPitch;
-            utterance.volume = options.volume || speechVolume;
-            utterance.lang = options.language || getLanguageCode(currentLanguage);
-
-            // Event handlers
-            utterance.onstart = () => {
-                setIsReading(true);
-                setCurrentUtterance(utterance);
-                console.log('TTS: Started speaking:', text.substring(0, 50) + '...');
-            };
-
-            utterance.onend = () => {
-                setIsReading(false);
-                setCurrentUtterance(null);
-                console.log('TTS: Finished speaking');
-            };
-
-            utterance.onerror = (event) => {
-                console.error('TTS Error:', event.error);
-                setIsReading(false);
-                setCurrentUtterance(null);
-            };
-
-            utterance.onpause = () => {
-                console.log('TTS: Paused');
-            };
-
-            utterance.onresume = () => {
-                console.log('TTS: Resumed');
-            };
-
-            // Try to get the best voice for the language
-            const voices = window.speechSynthesis.getVoices();
-            
-            // Enhanced voice selection for better language support
-            let preferredVoice = null;
-            
-            // First, try exact language match
-            preferredVoice = voices.find(voice => 
-                voice.lang.toLowerCase() === utterance.lang.toLowerCase()
-            );
-            
-            // If no exact match, try language family match (e.g., 'te' for 'te-IN')
-            if (!preferredVoice) {
-                const languagePrefix = utterance.lang.split('-')[0];
-                preferredVoice = voices.find(voice => 
-                    voice.lang.toLowerCase().startsWith(languagePrefix.toLowerCase())
-                );
-            }
-            
-            // For Indian languages, try alternative voice selection
-            if (!preferredVoice && (utterance.lang.includes('-IN') || currentLanguage === 'te')) {
-                // Look for any Indian voice that might work
-                preferredVoice = voices.find(voice => 
-                    voice.lang.includes('-IN') || 
-                    voice.name.toLowerCase().includes('indian') ||
-                    voice.name.toLowerCase().includes('hindi') // Sometimes Hindi voice can handle other Indian languages
-                );
-            }
-            
-            // Fallback: try to find any voice that starts with the current language
-            if (!preferredVoice) {
-                preferredVoice = voices.find(voice => 
-                    voice.lang.toLowerCase().startsWith(currentLanguage.toLowerCase())
-                );
-            }
-            
-            if (preferredVoice) {
-                utterance.voice = preferredVoice;
-                console.log(`TTS: Using voice "${preferredVoice.name}" (${preferredVoice.lang}) for language "${currentLanguage}"`);
-            } else {
-                // Special handling for Telugu and other Indian languages
-                if (currentLanguage === 'te' || utterance.lang.includes('-IN')) {
-                    console.warn(`TTS: No Telugu/Indian voice available. Checking for alternative options...`);
-                    
-                    // Try Hindi voice as fallback for Telugu (many browsers support Hindi better)
-                    const hindiVoice = voices.find(voice => 
-                        voice.lang.includes('hi-IN') || voice.lang.includes('hi')
-                    );
-                    
-                    if (hindiVoice) {
-                        utterance.voice = hindiVoice;
-                        utterance.rate = (options.rate || speechRate) * 0.8; // Slower for cross-language pronunciation
-                        console.log(`TTS: Using Hindi voice as fallback for Telugu: "${hindiVoice.name}"`);
-                    } else {
-                        // Use default voice with slower rate
-                        utterance.rate = (options.rate || speechRate) * 0.7;
-                        console.log(`TTS: Using default voice for Telugu with slower rate`);
-                    }
-                } else {
-                    console.warn(`TTS: No suitable voice found for language "${currentLanguage}" (${utterance.lang}). Available voices:`, 
-                        voices.map(v => `${v.name} (${v.lang})`).slice(0, 5));
+            // Try Google TTS first
+            if (useGoogleTTS) {
+                console.log(`Attempting Google TTS for language: ${currentLanguage} (${languageInfo.code})`);
+                const audioContent = await synthesizeWithGoogleTTS(text.trim(), languageInfo);
+                
+                if (audioContent) {
+                    await playAudioFromBase64(audioContent);
+                    return;
                 }
             }
 
-            // Start speaking
-            window.speechSynthesis.speak(utterance);
+            // Fallback to browser TTS
+            console.log(`Using browser TTS for language: ${currentLanguage}`);
+            await speakWithBrowserTTS(text, options, languageInfo);
 
         } catch (error) {
             console.error('Error in text-to-speech:', error);
             setIsReading(false);
             setCurrentUtterance(null);
+            
+            // Try browser TTS as last resort
+            try {
+                await speakWithBrowserTTS(text, options, languageInfo);
+            } catch (fallbackError) {
+                console.error('Browser TTS fallback also failed:', fallbackError);
+            }
         }
     };
 
+    // Browser TTS implementation (fallback)
+    const speakWithBrowserTTS = (text, options = {}, languageInfo) => {
+        return new Promise((resolve, reject) => {
+            // Check if browser supports speech synthesis
+            if (!window.speechSynthesis) {
+                reject(new Error('Speech synthesis not supported in this browser'));
+                return;
+            }
+
+            try {
+                // Cancel any existing speech first
+                window.speechSynthesis.cancel();
+                
+                // Small delay to ensure cancellation
+                setTimeout(() => {
+                    const utterance = new SpeechSynthesisUtterance(text.trim());
+                    
+                    // Set speech parameters
+                    utterance.rate = options.rate || speechRate;
+                    utterance.pitch = options.pitch || speechPitch;
+                    utterance.volume = options.volume || speechVolume;
+                    utterance.lang = options.language || languageInfo.code;
+
+                    // Event handlers
+                    utterance.onstart = () => {
+                        setIsReading(true);
+                        setCurrentUtterance(utterance);
+                        console.log('Browser TTS: Started speaking:', text.substring(0, 50) + '...');
+                    };
+
+                    utterance.onend = () => {
+                        setIsReading(false);
+                        setCurrentUtterance(null);
+                        console.log('Browser TTS: Finished speaking');
+                        resolve();
+                    };
+
+                    utterance.onerror = (event) => {
+                        console.error('Browser TTS Error:', event.error);
+                        setIsReading(false);
+                        setCurrentUtterance(null);
+                        
+                        // Handle permission errors gracefully
+                        if (event.error === 'not-allowed') {
+                            console.warn('Browser TTS: Audio permission denied. User needs to interact with page first.');
+                            // Don't reject - just log the issue
+                            resolve();
+                        } else {
+                            reject(new Error(`Browser TTS Error: ${event.error}`));
+                        }
+                    };
+
+                    // Enhanced voice selection for browser TTS
+                    const voices = window.speechSynthesis.getVoices();
+                    let preferredVoice = null;
+                    
+                    // First, try exact language match
+                    preferredVoice = voices.find(voice => 
+                        voice.lang.toLowerCase() === utterance.lang.toLowerCase()
+                    );
+                    
+                    // If no exact match, try language family match
+                    if (!preferredVoice) {
+                        const languagePrefix = utterance.lang.split('-')[0];
+                        preferredVoice = voices.find(voice => 
+                            voice.lang.toLowerCase().startsWith(languagePrefix.toLowerCase())
+                        );
+                    }
+                    
+                    // For Indian languages, try alternative voice selection
+                    if (!preferredVoice && (utterance.lang.includes('-IN') || currentLanguage === 'te')) {
+                        preferredVoice = voices.find(voice => 
+                            voice.lang.includes('-IN') || 
+                            voice.name.toLowerCase().includes('hindi')
+                        );
+                    }
+                    
+                    if (preferredVoice) {
+                        utterance.voice = preferredVoice;
+                        console.log(`Browser TTS: Using voice "${preferredVoice.name}" (${preferredVoice.lang})`);
+                    } else {
+                        console.warn(`Browser TTS: No suitable voice found for ${currentLanguage}`);
+                    }
+
+                    // Start speaking with error handling
+                    try {
+                        window.speechSynthesis.speak(utterance);
+                    } catch (speakError) {
+                        console.error('Error calling speechSynthesis.speak:', speakError);
+                        setIsReading(false);
+                        setCurrentUtterance(null);
+                        reject(speakError);
+                    }
+                }, 100);
+
+            } catch (error) {
+                reject(error);
+            }
+        });
+    };
+
     const stopSpeech = () => {
+        // Stop browser TTS
         if (window.speechSynthesis) {
             window.speechSynthesis.cancel();
-            setIsReading(false);
-            setCurrentUtterance(null);
         }
+        
+        // Stop Google TTS audio
+        if (currentUtterance && currentUtterance.pause) {
+            currentUtterance.pause();
+            currentUtterance.currentTime = 0;
+        }
+        
+        setIsReading(false);
+        setCurrentUtterance(null);
     };
 
     const pauseSpeech = () => {
@@ -295,6 +420,7 @@ export const TextToSpeechProvider = ({ children }) => {
         speechPitch,
         speechVolume,
         currentLanguage,
+        useGoogleTTS,
         speak,
         stopSpeech,
         pauseSpeech,
@@ -304,13 +430,19 @@ export const TextToSpeechProvider = ({ children }) => {
         setSpeechRate,
         setSpeechPitch,
         setSpeechVolume,
+        setUseGoogleTTS,
         getAvailableVoices,
         getAvailableVoicesForLanguage,
+        initializeAudioPermissions,
         // Expose TTS properties with shorter names for easier access
         ttsEnabled: isEnabled,
         ttsRate: speechRate,
         ttsPitch: speechPitch,
         ttsVolume: speechVolume,
+        googleTTS: useGoogleTTS,
+        // Debug functions
+        clearAudioCache: () => setAudioCache(new Map()),
+        getCacheSize: () => audioCache.size,
     };
 
     return (

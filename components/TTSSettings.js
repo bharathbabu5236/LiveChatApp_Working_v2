@@ -27,14 +27,20 @@ const TTSSettings = ({ buttonStyle, iconColor = '#2c3e50', iconSize = 24 }) => {
         setSpeechVolume,
         speak,
         stopSpeech,
-        isReading
+        isReading,
+        initializeAudioPermissions
     } = useTextToSpeech();
     
     const { t } = useTranslation();
 
     const testSpeech = () => {
-        const testText = t('welcome_title') || 'Hello! This is a test of the text-to-speech feature.';
-        speak(testText);
+        // Initialize audio permissions first
+        initializeAudioPermissions();
+        
+        setTimeout(() => {
+            const testText = t('welcome_title') || 'Hello! This is a test of the text-to-speech feature.';
+            speak(testText);
+        }, 500);
     };
 
     return (

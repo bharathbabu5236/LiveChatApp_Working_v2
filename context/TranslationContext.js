@@ -16,11 +16,24 @@ export const useTranslation = () => {
 // UI text translations
 const UI_TRANSLATIONS = {
     // Home Screen
-    'welcome_title': 'Welcome to Live Chat Support',
+    'welcome_title': 'welcome to live chat',
     'welcome_subtitle': 'Get instant help from our professional support team. We are here to assist you 24/7 with any questions or concerns you may have.',
     'start_chat': 'Start Chat',
     'admin': 'Admin',
     'reviews': 'Reviews',
+    
+    // Care Services
+    'personal_care_title': 'Personal Care Assistance',
+    'personal_care_description': 'Our dedicated caregivers help seniors maintain dignity and independence by providing essential daily support. We assist with bathing and hygiene to promote cleanliness and comfort while preventing skin infections. Dressing and grooming assistance ensures individuals look and feel their best, including clothing selection, hair care, and personal grooming.',
+    'personal_care_mobility': 'We also offer mobility support, helping seniors move safely whether walking, transferring, or using mobility aids like walkers or wheelchairs. Additionally, our caregivers emphasize fall prevention and safety, ensuring a secure home environment by monitoring surroundings and minimizing risks.',
+    
+    'companionship_title': 'Companionship & Emotional Support',
+    'companionship_description': 'We provide friendly conversation, hobby engagement, and emotional support to keep seniors socially active and engaged. Our caring companions foster meaningful conversations, reminiscing on past experiences, and sharing stories to keep minds stimulated. We also encourage hobbies, games, and light physical activities to promote social interaction and well-being.',
+    'companionship_support': 'Our caregivers accompany seniors on walks, errands, and medical appointments, ensuring they feel supported and connected to their community. Additionally, we offer emotional reassurance, providing a comforting presence to reduce feelings of loneliness, anxiety, or depression, helping seniors maintain a positive outlook on life.',
+    
+    'medication_title': 'Medication Reminders',
+    'medication_description': 'Our caregivers ensure medications are taken on time, in the correct dosage, and as prescribed by healthcare professionals. They provide gentle reminders, assist with medication organization, and track health changes to ensure proper care.',
+    'medication_monitoring': 'We also monitor for side effects, prioritizing safety and well-being. Additionally, our caregivers coordinate with families and healthcare providers, reporting any concerns or necessary adjustments to promote effective medication management and overall health stability.',
     
     // Reviews Screen
     'customer_reviews': 'Customer Reviews',

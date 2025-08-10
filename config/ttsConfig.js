@@ -12,7 +12,7 @@ export const GOOGLE_TTS_CONFIG = {
 
 // Google Speech-to-Text uses the same API key
 export const GOOGLE_STT_CONFIG = {
-    API_KEY: 'AIzaSyBU4mlwG3hMan-yPDFtbpaT2gnh5Xo6nqI',
+    API_KEY: 'AIzaSyALUXNwwBVvJd_19vBIkCWO4QQdERRlMt8',
     ENDPOINT: 'https://speech.googleapis.com/v1/speech:recognize',
     ENABLED: true, // Google STT enabled for high-quality recognition
     DEBUG: true, // Enable debug logging

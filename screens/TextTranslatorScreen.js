@@ -16,6 +16,7 @@ import { useTranslation } from '../context/TranslationContext';
 import { useTextToSpeech } from '../context/TextToSpeechContext';
 import { translateText } from '../translationService';
 import LanguageSelector from '../components/LanguageSelector';
+import SourceLanguageSelector from '../components/SourceLanguageSelector';
 import GoogleSpeechToText from '../services/googleSpeechToText';
 
 const TextTranslatorScreen = () => {
@@ -101,70 +102,24 @@ const TextTranslatorScreen = () => {
         return languageMap[langCode] || 'en-US';
     };
 
-    // Get display name for language
+    // Get display name for language (simplified)
     const getLanguageName = (langCode) => {
         const languageNames = {
-            'en': 'English',
-            'es': 'Spanish',
-            'fr': 'French',
-            'de': 'German',
-            'it': 'Italian',
-            'pt': 'Portuguese',
-            'ru': 'Russian',
-            'ja': 'Japanese',
-            'ko': 'Korean',
-            'zh': 'Chinese',
-            'ar': 'Arabic',
-            'hi': 'Hindi',
-            'te': 'Telugu',
-            'ta': 'Tamil',
-            'bn': 'Bengali',
-            'mr': 'Marathi',
-            'gu': 'Gujarati',
-            'kn': 'Kannada',
-            'ml': 'Malayalam',
-            'or': 'Odia',
-            'pa': 'Punjabi',
-            'ur': 'Urdu',
-            'ne': 'Nepali',
-            'si': 'Sinhala',
-            'my': 'Myanmar',
-            'th': 'Thai',
-            'vi': 'Vietnamese',
-            'id': 'Indonesian',
-            'ms': 'Malay',
-            'tl': 'Filipino',
-            'sw': 'Swahili',
-            'am': 'Amharic',
-            'tr': 'Turkish',
-            'fa': 'Persian',
-            'he': 'Hebrew',
-            'nl': 'Dutch',
-            'sv': 'Swedish',
-            'da': 'Danish',
-            'no': 'Norwegian',
-            'fi': 'Finnish',
-            'pl': 'Polish',
-            'cs': 'Czech',
-            'sk': 'Slovak',
-            'hu': 'Hungarian',
-            'ro': 'Romanian',
-            'bg': 'Bulgarian',
-            'hr': 'Croatian',
-            'sr': 'Serbian',
-            'sl': 'Slovenian',
-            'et': 'Estonian',
-            'lv': 'Latvian',
-            'lt': 'Lithuanian',
-            'uk': 'Ukrainian',
-            'be': 'Belarusian',
-            'ka': 'Georgian',
-            'hy': 'Armenian',
-            'az': 'Azerbaijani',
-            'kk': 'Kazakh',
-            'ky': 'Kyrgyz',
-            'uz': 'Uzbek',
-            'mn': 'Mongolian'
+            'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+            'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian', 'ja': 'Japanese',
+            'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic', 'hi': 'Hindi',
+            'te': 'Telugu', 'ta': 'Tamil', 'bn': 'Bengali', 'mr': 'Marathi',
+            'gu': 'Gujarati', 'kn': 'Kannada', 'ml': 'Malayalam', 'or': 'Odia',
+            'pa': 'Punjabi', 'ur': 'Urdu', 'ne': 'Nepali', 'si': 'Sinhala',
+            'my': 'Myanmar', 'th': 'Thai', 'vi': 'Vietnamese', 'id': 'Indonesian',
+            'ms': 'Malay', 'tl': 'Filipino', 'sw': 'Swahili', 'am': 'Amharic',
+            'tr': 'Turkish', 'fa': 'Persian', 'he': 'Hebrew', 'nl': 'Dutch',
+            'sv': 'Swedish', 'da': 'Danish', 'no': 'Norwegian', 'fi': 'Finnish',
+            'pl': 'Polish', 'cs': 'Czech', 'sk': 'Slovak', 'hu': 'Hungarian',
+            'ro': 'Romanian', 'bg': 'Bulgarian', 'hr': 'Croatian', 'sr': 'Serbian',
+            'sl': 'Slovenian', 'et': 'Estonian', 'lv': 'Latvian', 'lt': 'Lithuanian',
+            'uk': 'Ukrainian', 'be': 'Belarusian', 'ka': 'Georgian', 'hy': 'Armenian',
+            'az': 'Azerbaijani', 'kk': 'Kazakh', 'ky': 'Kyrgyz', 'uz': 'Uzbek', 'mn': 'Mongolian'
         };
         return languageNames[langCode] || langCode.toUpperCase();
     };
@@ -286,13 +241,6 @@ const TextTranslatorScreen = () => {
         }
     };
 
-    const handleSourceLanguageToggle = () => {
-        const commonLanguages = ['en', 'es', 'fr', 'de', 'it', 'hi', 'te', 'ta', 'ar', 'zh', 'ja'];
-        const currentIndex = commonLanguages.indexOf(sourceLanguage);
-        const nextIndex = (currentIndex + 1) % commonLanguages.length;
-        setSourceLanguage(commonLanguages[nextIndex]);
-    };
-
     const handleTranslate = async () => {
         if (!inputText.trim()) {
             Alert.alert('Error', 'Please enter some text to translate');
@@ -400,14 +348,11 @@ const TextTranslatorScreen = () => {
             <View style={styles.languageSection}>
                 <View style={styles.languageRow}>
                     <Text style={styles.languageLabel}>{t('from_language')}</Text>
-                    <TouchableOpacity 
-                        style={styles.languageButton}
-                        onPress={handleSourceLanguageToggle}
-                    >
-                        <Text style={styles.languageButtonText}>
-                            {getLanguageName(sourceLanguage)}
-                        </Text>
-                    </TouchableOpacity>
+                    <SourceLanguageSelector
+                        currentLanguage={sourceLanguage}
+                        onLanguageSelect={setSourceLanguage}
+                        buttonStyle={styles.languageButton}
+                    />
                 </View>
                 
                 <MaterialIcons name="swap-horiz" size={24} color="#3498db" style={styles.swapIcon} />
@@ -580,11 +525,6 @@ const styles = StyleSheet.create({
         padding: 12,
         borderRadius: 8,
         marginLeft: 10,
-    },
-    languageButtonText: {
-        fontSize: 16,
-        color: '#2c3e50',
-        textAlign: 'center',
     },
     swapIcon: {
         alignSelf: 'center',

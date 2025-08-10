@@ -1,5 +1,5 @@
 // LiveChatApp/screens/TextTranslatorScreen.js
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
     View, 
     Text, 
@@ -16,6 +16,7 @@ import { useTranslation } from '../context/TranslationContext';
 import { useTextToSpeech } from '../context/TextToSpeechContext';
 import { translateText } from '../translationService';
 import LanguageSelector from '../components/LanguageSelector';
+import GoogleSpeechToText from '../services/googleSpeechToText';
 
 const TextTranslatorScreen = () => {
     const navigation = useNavigation();
@@ -27,7 +28,270 @@ const TextTranslatorScreen = () => {
     const [isReading, setIsReading] = useState(false);
     const [audioInitialized, setAudioInitialized] = useState(false);
     const [sourceLanguage, setSourceLanguage] = useState('en');
+    const [isListening, setIsListening] = useState(false);
+    const [googleSTT, setGoogleSTT] = useState(null);
+    const [speechSupported, setSpeechSupported] = useState(false);
     const inputRef = useRef(null);
+
+    // Map language codes to speech recognition language codes
+    const getRecognitionLanguage = (langCode) => {
+        const languageMap = {
+            'en': 'en-US',
+            'es': 'es-ES',
+            'fr': 'fr-FR',
+            'de': 'de-DE',
+            'it': 'it-IT',
+            'pt': 'pt-PT',
+            'ru': 'ru-RU',
+            'ja': 'ja-JP',
+            'ko': 'ko-KR',
+            'zh': 'zh-CN',
+            'ar': 'ar-SA',
+            'hi': 'hi-IN',
+            'te': 'te-IN',
+            'ta': 'ta-IN',
+            'bn': 'bn-IN',
+            'mr': 'mr-IN',
+            'gu': 'gu-IN',
+            'kn': 'kn-IN',
+            'ml': 'ml-IN',
+            'or': 'or-IN',
+            'pa': 'pa-IN',
+            'ur': 'ur-IN',
+            'ne': 'ne-NP',
+            'si': 'si-LK',
+            'my': 'my-MM',
+            'th': 'th-TH',
+            'vi': 'vi-VN',
+            'id': 'id-ID',
+            'ms': 'ms-MY',
+            'tl': 'tl-PH',
+            'sw': 'sw-KE',
+            'am': 'am-ET',
+            'tr': 'tr-TR',
+            'fa': 'fa-IR',
+            'he': 'he-IL',
+            'nl': 'nl-NL',
+            'sv': 'sv-SE',
+            'da': 'da-DK',
+            'no': 'no-NO',
+            'fi': 'fi-FI',
+            'pl': 'pl-PL',
+            'cs': 'cs-CZ',
+            'sk': 'sk-SK',
+            'hu': 'hu-HU',
+            'ro': 'ro-RO',
+            'bg': 'bg-BG',
+            'hr': 'hr-HR',
+            'sr': 'sr-RS',
+            'sl': 'sl-SI',
+            'et': 'et-EE',
+            'lv': 'lv-LV',
+            'lt': 'lt-LT',
+            'uk': 'uk-UA',
+            'be': 'be-BY',
+            'ka': 'ka-GE',
+            'hy': 'hy-AM',
+            'az': 'az-AZ',
+            'kk': 'kk-KZ',
+            'ky': 'ky-KG',
+            'uz': 'uz-UZ',
+            'mn': 'mn-MN'
+        };
+        return languageMap[langCode] || 'en-US';
+    };
+
+    // Get display name for language
+    const getLanguageName = (langCode) => {
+        const languageNames = {
+            'en': 'English',
+            'es': 'Spanish',
+            'fr': 'French',
+            'de': 'German',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'ru': 'Russian',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'zh': 'Chinese',
+            'ar': 'Arabic',
+            'hi': 'Hindi',
+            'te': 'Telugu',
+            'ta': 'Tamil',
+            'bn': 'Bengali',
+            'mr': 'Marathi',
+            'gu': 'Gujarati',
+            'kn': 'Kannada',
+            'ml': 'Malayalam',
+            'or': 'Odia',
+            'pa': 'Punjabi',
+            'ur': 'Urdu',
+            'ne': 'Nepali',
+            'si': 'Sinhala',
+            'my': 'Myanmar',
+            'th': 'Thai',
+            'vi': 'Vietnamese',
+            'id': 'Indonesian',
+            'ms': 'Malay',
+            'tl': 'Filipino',
+            'sw': 'Swahili',
+            'am': 'Amharic',
+            'tr': 'Turkish',
+            'fa': 'Persian',
+            'he': 'Hebrew',
+            'nl': 'Dutch',
+            'sv': 'Swedish',
+            'da': 'Danish',
+            'no': 'Norwegian',
+            'fi': 'Finnish',
+            'pl': 'Polish',
+            'cs': 'Czech',
+            'sk': 'Slovak',
+            'hu': 'Hungarian',
+            'ro': 'Romanian',
+            'bg': 'Bulgarian',
+            'hr': 'Croatian',
+            'sr': 'Serbian',
+            'sl': 'Slovenian',
+            'et': 'Estonian',
+            'lv': 'Latvian',
+            'lt': 'Lithuanian',
+            'uk': 'Ukrainian',
+            'be': 'Belarusian',
+            'ka': 'Georgian',
+            'hy': 'Armenian',
+            'az': 'Azerbaijani',
+            'kk': 'Kazakh',
+            'ky': 'Kyrgyz',
+            'uz': 'Uzbek',
+            'mn': 'Mongolian'
+        };
+        return languageNames[langCode] || langCode.toUpperCase();
+    };
+
+    // Initialize Speech Recognition with Web Speech API (more reliable)
+    useEffect(() => {
+        const initializeSpeechRecognition = () => {
+            try {
+                console.log('Initializing speech recognition...');
+                
+                // Primary: Web Speech API
+                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    const recognition = new SpeechRecognition();
+                    
+                    // Configuration
+                    recognition.continuous = false;
+                    recognition.interimResults = false;
+                    recognition.lang = getRecognitionLanguage(sourceLanguage);
+                    
+                    // Event handlers
+                    recognition.onstart = () => {
+                        console.log('Speech recognition started');
+                        setIsListening(true);
+                    };
+                    
+                    recognition.onresult = (event) => {
+                        const transcript = event.results[0][0].transcript;
+                        const confidence = event.results[0][0].confidence;
+                        
+                        console.log('Speech recognized:', transcript, 'Confidence:', confidence);
+                        setInputText(prev => prev + (prev ? ' ' : '') + transcript);
+                        setIsListening(false);
+                    };
+                    
+                    recognition.onerror = (event) => {
+                        console.error('Speech recognition error:', event.error);
+                        setIsListening(false);
+                        
+                        if (event.error === 'not-allowed') {
+                            Alert.alert('Microphone Access Denied', 'Please allow microphone access to use speech recognition.');
+                        } else if (event.error === 'no-speech') {
+                            Alert.alert('No Speech Detected', 'Please try speaking again.');
+                        } else {
+                            Alert.alert('Speech Recognition Error', `Error: ${event.error}`);
+                        }
+                    };
+                    
+                    recognition.onend = () => {
+                        console.log('Speech recognition ended');
+                        setIsListening(false);
+                    };
+                    
+                    setGoogleSTT({ webSpeechAPI: recognition });
+                    setSpeechSupported(true);
+                    console.log('Web Speech API initialized successfully');
+                    
+                } else {
+                    console.warn('Speech recognition not supported in this browser');
+                    setSpeechSupported(false);
+                    Alert.alert('Not Supported', 'Speech recognition is not supported in this browser. Please use Chrome or a compatible browser.');
+                }
+                
+            } catch (error) {
+                console.error('Error initializing speech recognition:', error);
+                setSpeechSupported(false);
+                Alert.alert('Initialization Error', 'Failed to initialize speech recognition.');
+            }
+        };
+
+        initializeSpeechRecognition();
+    }, [sourceLanguage]);
+
+    const handleStartListening = async () => {
+        if (!googleSTT || !googleSTT.webSpeechAPI) {
+            Alert.alert('Error', 'Speech recognition not available. Please use a supported browser like Chrome.');
+            return;
+        }
+
+        // Check if already listening
+        if (isListening) {
+            console.log('Already listening, ignoring start request');
+            return;
+        }
+
+        try {
+            console.log('Starting speech recognition for language:', sourceLanguage);
+            
+            // Update language before starting
+            googleSTT.webSpeechAPI.lang = getRecognitionLanguage(sourceLanguage);
+            
+            // Start recognition
+            googleSTT.webSpeechAPI.start();
+            
+        } catch (error) {
+            console.error('Error starting speech recognition:', error);
+            setIsListening(false);
+            
+            if (error.name === 'InvalidStateError') {
+                Alert.alert('Speech Recognition Busy', 'Please wait a moment and try again.');
+            } else {
+                Alert.alert('Recording Error', `Failed to start recording: ${error.message}`);
+            }
+        }
+    };
+
+    const handleStopListening = async () => {
+        if (!googleSTT || !googleSTT.webSpeechAPI || !isListening) {
+            return;
+        }
+
+        try {
+            console.log('Stopping speech recognition...');
+            googleSTT.webSpeechAPI.stop();
+            setIsListening(false);
+        } catch (error) {
+            console.error('Error stopping speech recognition:', error);
+            setIsListening(false);
+        }
+    };
+
+    const handleSourceLanguageToggle = () => {
+        const commonLanguages = ['en', 'es', 'fr', 'de', 'it', 'hi', 'te', 'ta', 'ar', 'zh', 'ja'];
+        const currentIndex = commonLanguages.indexOf(sourceLanguage);
+        const nextIndex = (currentIndex + 1) % commonLanguages.length;
+        setSourceLanguage(commonLanguages[nextIndex]);
+    };
 
     const handleTranslate = async () => {
         if (!inputText.trim()) {
@@ -138,10 +402,10 @@ const TextTranslatorScreen = () => {
                     <Text style={styles.languageLabel}>{t('from_language')}</Text>
                     <TouchableOpacity 
                         style={styles.languageButton}
-                        onPress={() => {/* Could implement source language selector */}}
+                        onPress={handleSourceLanguageToggle}
                     >
                         <Text style={styles.languageButtonText}>
-                            {sourceLanguage === 'en' ? t('english') : sourceLanguage.toUpperCase()}
+                            {getLanguageName(sourceLanguage)}
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -166,6 +430,24 @@ const TextTranslatorScreen = () => {
                             <MaterialIcons name="content-paste" size={20} color="#3498db" />
                         </TouchableOpacity>
                         <TouchableOpacity
+                            style={[
+                                styles.actionButton, 
+                                isListening && styles.activeButton,
+                                !speechSupported && styles.disabledButton
+                            ]}
+                            onPress={isListening ? handleStopListening : handleStartListening}
+                            disabled={!speechSupported}
+                        >
+                            <MaterialIcons 
+                                name={isListening ? "mic_off" : "mic"} 
+                                size={20} 
+                                color={
+                                    !speechSupported ? "#bdc3c7" : 
+                                    isListening ? "#e74c3c" : "#3498db"
+                                } 
+                            />
+                        </TouchableOpacity>
+                        <TouchableOpacity
                             style={[styles.actionButton, isReading && styles.activeButton]}
                             onPress={handleReadOriginal}
                         >
@@ -186,9 +468,13 @@ const TextTranslatorScreen = () => {
                 
                 <TextInput
                     ref={inputRef}
-                    style={styles.textInput}
+                    style={[styles.textInput, isListening && styles.listeningInput]}
                     multiline
-                    placeholder={t('paste_text_placeholder')}
+                    placeholder={
+                        isListening 
+                            ? `🎤 Listening in ${getLanguageName(sourceLanguage)}...` 
+                            : t('paste_text_placeholder')
+                    }
                     value={inputText}
                     onChangeText={setInputText}
                     textAlignVertical="top"
@@ -338,6 +624,10 @@ const styles = StyleSheet.create({
     activeButton: {
         backgroundColor: '#fee',
     },
+    disabledButton: {
+        backgroundColor: '#f8f9fa',
+        opacity: 0.5,
+    },
     textInput: {
         minHeight: 150,
         maxHeight: 300,
@@ -348,6 +638,11 @@ const styles = StyleSheet.create({
         fontSize: 16,
         backgroundColor: '#fafafa',
     },
+    listeningInput: {
+        borderColor: '#e74c3c',
+        borderWidth: 2,
+        backgroundColor: '#fff5f5',
+    },
     translateButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -357,9 +652,6 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         marginBottom: 20,
         gap: 10,
-    },
-    disabledButton: {
-        backgroundColor: '#bdc3c7',
     },
     translateButtonText: {
         color: '#fff',

@@ -49,13 +49,15 @@ const UI_TRANSLATIONS = {
     'text_translator_title': 'Text Translator & Reader',
     'original_text': 'Original Text',
     'translated_text': 'Translated Text',
-    'paste_text_placeholder': 'Paste or type your text here...',
+    'paste_text_placeholder': 'Paste, type, or use voice input...',
     'translated_text_placeholder': 'Translated text will appear here...',
     'translate_button': 'Translate',
     'translating_button': 'Translating...',
     'from_language': 'From:',
     'to_language': 'To:',
     'english': 'English',
+    'listening_placeholder': 'Listening for speech...',
+    'speech_not_supported': 'Speech recognition not supported',
     
     // Language Selection
     'select_language': 'Select Language',

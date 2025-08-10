@@ -14,6 +14,7 @@ import AgentChatListScreen from './screens/AgentChatListScreen';
 import AgentChatScreen from './screens/AgentChatScreen';
 import AdminScreen from './screens/AdminScreen';
 import ReviewsScreen from './screens/ReviewsScreen';
+import TextTranslatorScreen from './screens/TextTranslatorScreen';
 
 const Stack = createStackNavigator();
 
@@ -101,6 +102,11 @@ export default function App() {
             <Stack.Screen
               name="Reviews"
               component={ReviewsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="TextTranslator"
+              component={TextTranslatorScreen}
               options={{ headerShown: false }}
             />
           </Stack.Navigator>

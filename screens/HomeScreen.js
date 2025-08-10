@@ -54,6 +54,11 @@ const HomeScreen = () => {
         navigation.navigate('Reviews');
     };
 
+    const handleTextTranslatorPress = () => {
+        setShowMenu(false);
+        navigation.navigate('TextTranslator');
+    };
+
     const handleCloseMenu = () => {
         setShowMenu(false);
     };
@@ -187,12 +192,21 @@ const HomeScreen = () => {
                             </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.menuItem, styles.lastMenuItem]}
+                            style={styles.menuItem}
                             onPress={handleReviewsPress}
                         >
                             <MaterialIcons name="rate-review" size={24} color="#2c3e50" />
                             <Text style={styles.menuItemText}>
                                 {t('reviews')}
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.menuItem, styles.lastMenuItem]}
+                            onPress={handleTextTranslatorPress}
+                        >
+                            <MaterialIcons name="translate" size={24} color="#2c3e50" />
+                            <Text style={styles.menuItemText}>
+                                {t('text_translator')}
                             </Text>
                         </TouchableOpacity>
                     </View>

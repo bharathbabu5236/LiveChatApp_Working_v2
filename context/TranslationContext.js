@@ -44,6 +44,19 @@ const UI_TRANSLATIONS = {
     'translating': 'Translating',
     'translated_from_original': 'Translated from original language',
     
+    // Text Translator Screen
+    'text_translator': 'Text Translator',
+    'text_translator_title': 'Text Translator & Reader',
+    'original_text': 'Original Text',
+    'translated_text': 'Translated Text',
+    'paste_text_placeholder': 'Paste or type your text here...',
+    'translated_text_placeholder': 'Translated text will appear here...',
+    'translate_button': 'Translate',
+    'translating_button': 'Translating...',
+    'from_language': 'From:',
+    'to_language': 'To:',
+    'english': 'English',
+    
     // Language Selection
     'select_language': 'Select Language',
     'search_languages': 'Search languages...',

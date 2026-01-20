@@ -5,6 +5,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth, appId } from '../firebaseConfig';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { translateMessage, testTranslation } from '../translationService';
+import DirectVoiceCallModal from '../components/DirectVoiceCallModal';
+import AgoraTestButton from '../components/AgoraTestButton';
 
 const AgentChatScreen = ({ route, navigation }) => {
     const { chatId, customerId } = route.params;
@@ -15,6 +17,7 @@ const AgentChatScreen = ({ route, navigation }) => {
     const [agentLanguage, setAgentLanguage] = useState('en');
     const [translatedMessages, setTranslatedMessages] = useState({});
     const [agentMessageTranslations, setAgentMessageTranslations] = useState({});
+    const [showVoiceCall, setShowVoiceCall] = useState(false);
     const scrollViewRef = useRef(null);
     const currentAgentId = auth.currentUser?.uid;
 
@@ -321,6 +324,28 @@ const handleCloseChat = () => {
     navigation.goBack();
 };
 
+const handleStartVoiceCall = async () => {
+    console.log('Agent voice call button clicked - chatId:', chatId, 'customerId:', customerId, 'agentId:', currentAgentId);
+    
+    if (!currentAgentId) {
+        Alert.alert('Error', 'Agent not authenticated. Please log in again.');
+        return;
+    }
+
+    if (!customerId) {
+        Alert.alert('Error', 'Customer not identified. Please refresh the chat.');
+        return;
+    }
+    
+    console.log('Agent starting direct voice call with customer:', customerId);
+    setShowVoiceCall(true);
+};
+
+const handleVoiceCallEnd = () => {
+    console.log('Agent voice call ended');
+    setShowVoiceCall(false);
+};
+
 // Function to get placeholder text based on agent's language preference
 const getLanguagePlaceholder = (language) => {
     const placeholders = {
@@ -469,6 +494,13 @@ const getLanguagePlaceholder = (language) => {
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Chat with User: {customerId?.substring(0, 8)}...</Text>
                 <View style={styles.headerButtons}>
+                    {/* Agora Test Button */}
+                    <AgoraTestButton />
+                    
+                    {/* Voice call button */}
+                    <TouchableOpacity onPress={handleStartVoiceCall} style={styles.voiceCallButton}>
+                        <MaterialIcons name="phone" size={20} color="white" />
+                    </TouchableOpacity>
                     <Text style={[styles.chatStatusText, chatStatus === 'closed' ? styles.statusClosed : styles.statusOpen]}>
                         Status: {chatStatus.charAt(0).toUpperCase() + chatStatus.slice(1)}
                     </Text>
@@ -596,6 +628,16 @@ const getLanguagePlaceholder = (language) => {
                     <MaterialIcons name="send" size={24} color="white" />
                 </TouchableOpacity>
             </View>
+
+            {/* Voice Call Modal */}
+            <DirectVoiceCallModal
+                visible={showVoiceCall}
+                onClose={handleVoiceCallEnd}
+                currentUserId={currentAgentId}
+                targetUserId={customerId}
+                targetUserName={`Customer ${customerId?.substring(0, 8)}...`}
+                isInitiator={true}
+            />
         </View>
     );
 };
@@ -632,6 +674,22 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
+    },
+    voiceCallButton: {
+        backgroundColor: '#27ae60',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: '#ffffff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 3,
     },
     chatStatusText: {
         fontSize: 14,

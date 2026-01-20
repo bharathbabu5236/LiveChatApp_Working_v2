@@ -5,6 +5,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth, appId, authReadyPromise, signInAnonymously } from '../firebaseConfig';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, getDocs, where } from 'firebase/firestore';
 import { translateMessage, getSupportedLanguagesArray, getNativeLanguageName, testTranslation } from '../translationService';
+import DirectVoiceCallModal from '../components/DirectVoiceCallModal';
+import AgoraTestButton from '../components/AgoraTestButton';
+import VoiceCallDebug from '../components/VoiceCallDebug';
 
 const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const [messages, setMessages] = useState([]);
@@ -18,6 +21,8 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const [botStep, setBotStep] = useState('welcome'); // 'welcome', 'askName', 'askPhone', 'askLanguage', 'departmentSelection', 'chat'
     const [loadingChatSetup, setLoadingChatSetup] = useState(false);
     const [showScrollButton, setShowScrollButton] = useState(false);
+    const [showVoiceCall, setShowVoiceCall] = useState(false);
+    const [agentId, setAgentId] = useState(null);
     const [isMinimized, setIsMinimized] = useState(false);
     const [showLanguageModal, setShowLanguageModal] = useState(false);
     const [supportedLanguages, setSupportedLanguages] = useState([]);
@@ -234,6 +239,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
 
                 if (foundChatId) {
                     setChatId(foundChatId);
+                    setAgentId(assignedAgentId); // Store agent ID for voice calls
                     console.log("ChatPopup: Joined existing chat:", foundChatId);
                     setBotStep('chat');
                 } else {
@@ -251,6 +257,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                         lastMessageAt: serverTimestamp(),
                     });
                     setChatId(newChatRef.id);
+                    setAgentId(assignedAgentId); // Store agent ID for voice calls
                     console.log("ChatPopup: Created new chat:", newChatRef.id);
                     setBotStep('chat');
                 }
@@ -549,6 +556,38 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
 
     const toggleMinimize = () => {
         setIsMinimized(!isMinimized);
+    };
+
+    const handleStartVoiceCall = async () => {
+        console.log('Customer voice call button clicked - chatId:', chatId, 'agentId:', agentId, 'userId:', userId);
+        
+        if (!userId) {
+            Alert.alert('Error', 'User not authenticated. Please wait for chat to connect.');
+            return;
+        }
+
+        // If agentId is not set, try to get it from selectedDepartment
+        let targetAgentId = agentId;
+        if (!targetAgentId) {
+            if (selectedDepartment === 'doctor') {
+                targetAgentId = AGENT_DOCTOR_UID;
+            } else if (selectedDepartment === 'payments') {
+                targetAgentId = AGENT_PAYMENTS_UID;
+            }
+        }
+
+        if (!targetAgentId) {
+            Alert.alert('Error', 'Agent not assigned. Please contact support.');
+            return;
+        }
+        
+        console.log('Customer starting direct voice call with agent:', targetAgentId);
+        setShowVoiceCall(true);
+    };
+
+    const handleVoiceCallEnd = () => {
+        console.log('Customer voice call ended');
+        setShowVoiceCall(false);
     };
 
     if (!visible) return null;
@@ -868,6 +907,23 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                         </View>
                     </View>
                     <View style={styles.headerButtons}>
+                        {/* Voice Call Diagnostics - Temporary Debug Tool */}
+                        <VoiceCallDebug />
+                        
+                        {/* Agora Test Button */}
+                        <AgoraTestButton />
+                        
+                        {/* Voice call button - show if chat is connected */}
+                        {chatId && (
+                            <TouchableOpacity 
+                                style={styles.voiceCallButton} 
+                                onPress={handleStartVoiceCall}
+                                accessible={true}
+                                accessibilityLabel="Start voice call"
+                            >
+                                <MaterialIcons name="phone" size={20} color="white" />
+                            </TouchableOpacity>
+                        )}
                         <TouchableOpacity onPress={toggleMinimize} style={styles.minimizeButton}>
                             <MaterialIcons name="remove" size={20} color="#666" />
                         </TouchableOpacity>
@@ -994,6 +1050,16 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                         <MaterialIcons name="send" size={16} color="white" />
                     </TouchableOpacity>
                                  </View>
+
+                {/* Voice Call Modal */}
+                <DirectVoiceCallModal
+                    visible={showVoiceCall}
+                    onClose={handleVoiceCallEnd}
+                    currentUserId={userId}
+                    targetUserId={agentId || (selectedDepartment === 'doctor' ? AGENT_DOCTOR_UID : AGENT_PAYMENTS_UID)}
+                    targetUserName={selectedDepartment === 'doctor' ? 'Doctor' : 'Payments Agent'}
+                    isInitiator={true}
+                />
              </View>
          );
      }
@@ -1074,6 +1140,22 @@ const styles = StyleSheet.create({
     headerButtons: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+    voiceCallButton: {
+        backgroundColor: '#27ae60',
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 5,
+        borderWidth: 1,
+        borderColor: '#ffffff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 3,
     },
     minimizeButton: {
         padding: 5,

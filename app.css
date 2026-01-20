@@ -1,0 +1,16 @@
+/* Force scroll bar to always show and style it for web */
+body, #root, .always-scroll {
+  height: 100vh !important;
+  overflow-y: scroll !important;
+  scrollbar-width: thin !important; /* Firefox */
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  background: #e0e0e0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #bdbdbd;
+  border-radius: 4px;
+}

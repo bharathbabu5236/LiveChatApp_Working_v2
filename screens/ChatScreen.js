@@ -4,6 +4,8 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platfo
 import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth, appId, authReadyPromise, signInAnonymously } from '../firebaseConfig';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, getDocs, where } from 'firebase/firestore';
+import DirectVoiceCallModal from '../components/DirectVoiceCallModal';
+import AgoraTestButton from '../components/AgoraTestButton';
 
 const ChatScreen = () => {
     const [messages, setMessages] = useState([]);
@@ -13,6 +15,8 @@ const ChatScreen = () => {
     const [selectedDepartment, setSelectedDepartment] = useState(null); // New state for department
     const [loadingChatSetup, setLoadingChatSetup] = useState(false); // New state for loading indicator
     const [showScrollButton, setShowScrollButton] = useState(false);
+    const [showVoiceCall, setShowVoiceCall] = useState(false);
+    const [agentId, setAgentId] = useState(null);
     const flatListRef = useRef(null);
 
     // --- IMPORTANT: Replace these with the actual UIDs of your agents from Firebase Authentication ---
@@ -89,6 +93,7 @@ const ChatScreen = () => {
 
                 if (foundChatId) {
                     setChatId(foundChatId);
+                    setAgentId(assignedAgentId); // Store agent ID for voice calls
                     console.log("ChatScreen: Joined existing chat with ID:", foundChatId);
                 } else {
                     console.log("ChatScreen: No open chat found for this department, creating a new one...");
@@ -109,6 +114,7 @@ const ChatScreen = () => {
                         lastMessageAt: serverTimestamp(),
                     });
                     setChatId(newChatRef.id);
+                    setAgentId(assignedAgentId); // Store agent ID for voice calls
                     console.log("ChatScreen: Created new chat with ID:", newChatRef.id);
                 }
             } else {
@@ -200,6 +206,38 @@ const ChatScreen = () => {
         setShowScrollButton(!isCloseToBottom);
     };
 
+    const handleStartVoiceCall = () => {
+        console.log('Voice call button clicked - chatId:', chatId, 'agentId:', agentId, 'userId:', userId);
+        
+        if (!userId) {
+            Alert.alert('Error', 'User not authenticated. Please wait for chat to connect.');
+            return;
+        }
+
+        // If agentId is not set, try to get it from selectedDepartment
+        let targetAgentId = agentId;
+        if (!targetAgentId) {
+            if (selectedDepartment === 'doctor') {
+                targetAgentId = AGENT_DOCTOR_UID;
+            } else if (selectedDepartment === 'payments') {
+                targetAgentId = AGENT_PAYMENTS_UID;
+            }
+        }
+
+        if (!targetAgentId) {
+            Alert.alert('Error', 'Agent not assigned. Please contact support.');
+            return;
+        }
+        
+        console.log('Starting direct voice call with agent:', targetAgentId);
+        setShowVoiceCall(true);
+    };
+
+    const handleVoiceCallEnd = () => {
+        console.log('Voice call ended');
+        setShowVoiceCall(false);
+    };
+
     // Conditionally render department selection or chat interface
     if (!selectedDepartment) {
         return (
@@ -235,8 +273,47 @@ const ChatScreen = () => {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerText}>Live Chat - {selectedDepartment.toUpperCase()}</Text>
-                {userId && <Text style={styles.userIdText}>Your ID: {userId}</Text>}
+                <View style={styles.headerContent}>
+                    <Text style={styles.headerText}>Live Chat - {selectedDepartment.toUpperCase()}</Text>
+                    {userId && <Text style={styles.userIdText}>Your ID: {userId}</Text>}
+                    {/* Debug info - remove this later */}
+                    <Text style={{color: 'white', fontSize: 10, marginTop: 2}}>
+                        Chat: {chatId ? 'Yes' : 'No'} | Agent: {agentId ? 'Yes' : 'No'}
+                    </Text>
+                </View>
+                
+                <View style={styles.headerButtons}>
+                    {/* Agora Test Button */}
+                    <AgoraTestButton />
+                    
+                    {/* Temporary test button - always visible */}
+                    <TouchableOpacity 
+                        style={{
+                            backgroundColor: '#e74c3c',
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            marginRight: 10,
+                        }} 
+                        onPress={() => alert('Test button clicked!')}
+                    >
+                        <Text style={{color: 'white', fontSize: 20}}>📞</Text>
+                    </TouchableOpacity>
+                    
+                    {/* Voice call button - show if chat is connected */}
+                    {chatId && (
+                        <TouchableOpacity 
+                            style={styles.voiceCallButton} 
+                            onPress={handleStartVoiceCall}
+                            accessible={true}
+                            accessibilityLabel="Start voice call"
+                        >
+                            <MaterialIcons name="phone" size={24} color="white" />
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
 
             <View style={styles.chatArea}>
@@ -286,6 +363,16 @@ const ChatScreen = () => {
                     <MaterialIcons name="send" size={24} color="white" />
                 </TouchableOpacity>
             </View>
+
+            {/* Voice Call Modal */}
+            <DirectVoiceCallModal
+                visible={showVoiceCall}
+                onClose={handleVoiceCallEnd}
+                currentUserId={userId}
+                targetUserId={agentId || (selectedDepartment === 'doctor' ? AGENT_DOCTOR_UID : AGENT_PAYMENTS_UID)}
+                targetUserName={selectedDepartment === 'doctor' ? 'Doctor' : 'Payments Agent'}
+                isInitiator={true}
+            />
         </View>
     );
 };
@@ -307,10 +394,11 @@ const styles = StyleSheet.create({
         color: '#555',
     },
     header: {
+        flexDirection: 'row',
         padding: 15,
         backgroundColor: '#3498db',
         alignItems: 'center',
-        justifyContent: 'center',
+        justifyContent: 'space-between',
         borderBottomLeftRadius: 10,
         borderBottomRightRadius: 10,
         elevation: 3,
@@ -319,6 +407,17 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 3,
         height: 80,
+    },
+    headerContent: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        minWidth: 100,
     },
     headerText: {
         fontSize: 20,
@@ -329,6 +428,21 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: 'rgba(255,255,255,0.7)',
         marginTop: 5,
+    },
+    voiceCallButton: {
+        backgroundColor: '#27ae60',
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#ffffff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 5,
     },
     chatArea: {
         flex: 1,

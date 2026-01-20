@@ -23,7 +23,15 @@
       "edgeToEdgeEnabled": true
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "build": {
+        "babel": {
+          "include": [
+            "agora-rtc-sdk-ng"
+          ]
+        }
+      }
     }
   }
 }

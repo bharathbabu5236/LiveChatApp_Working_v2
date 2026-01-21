@@ -593,53 +593,69 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     // User type selection view
     if (!userType) {
         return (
-            <View style={styles.popupContainer}>
-                <View style={styles.popupHeader}>
-                    <View style={styles.headerContent}>
-                        <MaterialIcons name="smart-toy" size={24} color="#3498db" />
-                        <View style={styles.headerTextContainer}>
-                            <Text style={styles.headerTitle}>Welcome to HealthBuddy</Text>
-                            <Text style={styles.headerSubtitle}>Our AI assistant can help you through the process.</Text>
+            <Modal
+                visible={visible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={onClose}
+            >
+                <View style={styles.fullScreenOverlay}>
+                    <View style={styles.fullScreenPopupContainer}>
+                        <View style={styles.popupHeader}>
+                            <View style={styles.headerContent}>
+                                <MaterialIcons name="smart-toy" size={24} color="#3498db" />
+                                <View style={styles.headerTextContainer}>
+                                    <Text style={styles.headerTitle}>Welcome to HealthBuddy</Text>
+                                    <Text style={styles.headerSubtitle}>Our AI assistant can help you through the process.</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                                <MaterialIcons name="close" size={20} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <View style={styles.popupBody}>
+                            <Text style={styles.instructionText}>
+                                Hi! Please select your role to start chatting.
+                            </Text>
+                            
+                            <TouchableOpacity
+                                style={styles.departmentButton}
+                                onPress={() => setUserType('customer')}
+                            >
+                                <MaterialIcons name="person" size={20} color="white" />
+                                <Text style={styles.departmentButtonText}>I'm a Customer</Text>
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity
+                                style={[styles.departmentButton, styles.agentButton]}
+                                onPress={() => setUserType('agent')}
+                            >
+                                <MaterialIcons name="support-agent" size={20} color="white" />
+                                <Text style={styles.departmentButtonText}>I'm an Agent</Text>
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <View style={styles.popupFooter}>
+                            <Text style={styles.footerText}>Powered By AI</Text>
                         </View>
                     </View>
-                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <MaterialIcons name="close" size={20} color="#666" />
-                    </TouchableOpacity>
                 </View>
-                
-                <View style={styles.popupBody}>
-                    <Text style={styles.instructionText}>
-                        Hi! Please select your role to start chatting.
-                    </Text>
-                    
-                    <TouchableOpacity
-                        style={styles.departmentButton}
-                        onPress={() => setUserType('customer')}
-                    >
-                        <MaterialIcons name="person" size={20} color="white" />
-                        <Text style={styles.departmentButtonText}>I'm a Customer</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                        style={[styles.departmentButton, styles.agentButton]}
-                        onPress={() => setUserType('agent')}
-                    >
-                        <MaterialIcons name="support-agent" size={20} color="white" />
-                        <Text style={styles.departmentButtonText}>I'm an Agent</Text>
-                    </TouchableOpacity>
-                </View>
-                
-                <View style={styles.popupFooter}>
-                    <Text style={styles.footerText}>Powered By AI</Text>
-                </View>
-            </View>
+            </Modal>
         );
     }
 
     // Bot conversation views (for customers)
     if (userType === 'customer' && (botStep === 'askName' || botStep === 'askPhone' || botStep === 'askLanguageFromHeader')) {
         return (
-            <View style={styles.popupContainer}>
+            <Modal
+                visible={visible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={onClose}
+            >
+                <View style={styles.fullScreenOverlay}>
+                    <View style={styles.fullScreenPopupContainer}>
                 <View style={styles.popupHeader}>
                     <View style={styles.headerContent}>
                         <MaterialIcons name="smart-toy" size={24} color="#3498db" />
@@ -770,113 +786,131 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                          </View>
                      </View>
                  </Modal>
-             </View>
+                    </View>
+                </View>
+            </Modal>
          );
      }
 
     // Department selection view (for customers after bot conversation)
     if (userType === 'customer' && botStep === 'departmentSelection' && !selectedDepartment) {
         return (
-            <View style={styles.popupContainer}>
-                <View style={styles.popupHeader}>
-                    <View style={styles.headerContent}>
-                        <MaterialIcons name="smart-toy" size={24} color="#3498db" />
-                        <View style={styles.headerTextContainer}>
-                            <Text style={styles.headerTitle}>Welcome to HealthBuddy</Text>
-                            <Text style={styles.headerSubtitle}>Our AI assistant can help you through the process.</Text>
+            <Modal
+                visible={visible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={onClose}
+            >
+                <View style={styles.fullScreenOverlay}>
+                    <View style={styles.fullScreenPopupContainer}>
+                        <View style={styles.popupHeader}>
+                            <View style={styles.headerContent}>
+                                <MaterialIcons name="smart-toy" size={24} color="#3498db" />
+                                <View style={styles.headerTextContainer}>
+                                    <Text style={styles.headerTitle}>Welcome to HealthBuddy</Text>
+                                    <Text style={styles.headerSubtitle}>Our AI assistant can help you through the process.</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity onPress={() => setBotStep('askLanguage')} style={styles.backButton}>
+                                <MaterialIcons name="arrow-back" size={20} color="#666" />
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                                <MaterialIcons name="close" size={20} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <View style={styles.popupBody}>
+                            <ScrollView 
+                                ref={flatListRef}
+                                style={styles.messagesWrapper}
+                                onScroll={handleScroll}
+                            >
+                                <View style={styles.messagesList}>
+                                    {messages.map(message => {
+                                        // Handle bot message translation
+                                        let messageText = message.text;
+                                        if (message.senderType === 'bot') {
+                                            messageText = getBotMessageInLanguage(message.id, message.text);
+                                        }
+                                        
+                                        return (
+                                            <View key={message.id} style={[
+                                                styles.messageBubble,
+                                                message.senderType === 'user' ? styles.myMessage : styles.botMessage
+                                            ]}>
+                                                <Text style={styles.messageText}>{messageText}</Text>
+                                                <Text style={styles.messageTimestamp}>{message.timestamp}</Text>
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            </ScrollView>
+                            
+                            <Text style={styles.instructionText}>
+                                {getBotMessageInLanguage('department-instruction', `Hi ${customerInfo.name}! Please select a department to start chatting with the next available agent.`)}
+                            </Text>
+                            
+                            <TouchableOpacity
+                                style={styles.departmentButton}
+                                onPress={() => setSelectedDepartment('doctor')}
+                            >
+                                <MaterialIcons name="local-hospital" size={20} color="white" />
+                                <Text style={styles.departmentButtonText}>
+                                    {selectedLanguage === 'es' ? 'Departamento Médico' : 'Doctor Department'}
+                                </Text>
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity
+                                style={[styles.departmentButton, styles.paymentsButton]}
+                                onPress={() => setSelectedDepartment('payments')}
+                            >
+                                <MaterialIcons name="payment" size={20} color="white" />
+                                <Text style={styles.departmentButtonText}>
+                                    {selectedLanguage === 'es' ? 'Departamento de Pagos' : 'Payments Department'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                        
+                        <View style={styles.popupFooter}>
+                            <Text style={styles.footerText}>Powered By AI</Text>
                         </View>
                     </View>
-                    <TouchableOpacity onPress={() => setBotStep('askLanguage')} style={styles.backButton}>
-                        <MaterialIcons name="arrow-back" size={20} color="#666" />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <MaterialIcons name="close" size={20} color="#666" />
-                    </TouchableOpacity>
                 </View>
-                
-                <View style={styles.popupBody}>
-                    <ScrollView 
-                        ref={flatListRef}
-                        style={styles.messagesWrapper}
-                        onScroll={handleScroll}
-                    >
-                        <View style={styles.messagesList}>
-                            {messages.map(message => {
-                                // Handle bot message translation
-                                let messageText = message.text;
-                                if (message.senderType === 'bot') {
-                                    messageText = getBotMessageInLanguage(message.id, message.text);
-                                }
-                                
-                                return (
-                                    <View key={message.id} style={[
-                                        styles.messageBubble,
-                                        message.senderType === 'user' ? styles.myMessage : styles.botMessage
-                                    ]}>
-                                        <Text style={styles.messageText}>{messageText}</Text>
-                                        <Text style={styles.messageTimestamp}>{message.timestamp}</Text>
-                                    </View>
-                                );
-                            })}
-                        </View>
-                    </ScrollView>
-                    
-                                         <Text style={styles.instructionText}>
-                         {getBotMessageInLanguage('department-instruction', `Hi ${customerInfo.name}! Please select a department to start chatting with the next available agent.`)}
-                     </Text>
-                    
-                                         <TouchableOpacity
-                         style={styles.departmentButton}
-                         onPress={() => setSelectedDepartment('doctor')}
-                     >
-                         <MaterialIcons name="local-hospital" size={20} color="white" />
-                         <Text style={styles.departmentButtonText}>
-                             {selectedLanguage === 'es' ? 'Departamento Médico' : 'Doctor Department'}
-                         </Text>
-                     </TouchableOpacity>
-                     
-                     <TouchableOpacity
-                         style={[styles.departmentButton, styles.paymentsButton]}
-                         onPress={() => setSelectedDepartment('payments')}
-                     >
-                         <MaterialIcons name="payment" size={20} color="white" />
-                         <Text style={styles.departmentButtonText}>
-                             {selectedLanguage === 'es' ? 'Departamento de Pagos' : 'Payments Department'}
-                         </Text>
-                     </TouchableOpacity>
-                </View>
-                
-                <View style={styles.popupFooter}>
-                    <Text style={styles.footerText}>Powered By AI</Text>
-                </View>
-            </View>
+            </Modal>
         );
-    }
-
-    // Loading chat setup view
+    }    // Loading chat setup view
     if (loadingChatSetup) {
         return (
-            <View style={styles.popupContainer}>
-                <View style={styles.popupHeader}>
-                    <View style={styles.headerContent}>
-                        <MaterialIcons name="sync" size={24} color="#3498db" />
-                        <View style={styles.headerTextContainer}>
-                            <Text style={styles.headerTitle}>Connecting...</Text>
-                            <Text style={styles.headerSubtitle}>Setting up your chat</Text>
+            <Modal
+                visible={visible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={onClose}
+            >
+                <View style={styles.fullScreenOverlay}>
+                    <View style={styles.fullScreenPopupContainer}>
+                        <View style={styles.popupHeader}>
+                            <View style={styles.headerContent}>
+                                <MaterialIcons name="sync" size={24} color="#3498db" />
+                                <View style={styles.headerTextContainer}>
+                                    <Text style={styles.headerTitle}>Connecting...</Text>
+                                    <Text style={styles.headerSubtitle}>Setting up your chat</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                                <MaterialIcons name="close" size={20} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={[styles.popupBody, styles.loadingContainer]}>
+                            <ActivityIndicator size="large" color="#3498db" />
+                            <Text style={styles.loadingText}>Connecting to chat...</Text>
+                        </View>
+                        <View style={styles.popupFooter}>
+                            <Text style={styles.footerText}>Powered By AI</Text>
                         </View>
                     </View>
-                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <MaterialIcons name="close" size={20} color="#666" />
-                    </TouchableOpacity>
                 </View>
-                <View style={[styles.popupBody, styles.loadingContainer]}>
-                    <ActivityIndicator size="large" color="#3498db" />
-                    <Text style={styles.loadingText}>Connecting to chat...</Text>
-                </View>
-                <View style={styles.popupFooter}>
-                    <Text style={styles.footerText}>Powered By AI</Text>
-                </View>
-            </View>
+            </Modal>
         );
     }
 
@@ -895,16 +929,23 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     // Full chat view (only for customers with selected department and language)
     if (userType === 'customer' && selectedDepartment && selectedLanguage && botStep === 'chat') {
         return (
-            <View style={styles.popupContainer}>
-                <View style={styles.popupHeader}>
-                    <View style={styles.headerContent}>
-                        <MaterialIcons name="chat" size={24} color="#3498db" />
-                        <View style={styles.headerTextContainer}>
-                            <Text style={styles.headerTitle}>Live Chat - {selectedDepartment.toUpperCase()}</Text>
-                            <Text style={styles.headerSubtitle}>Connected to agent ({selectedLanguage.toUpperCase()})</Text>
-                        </View>
-                    </View>
-                    <View style={styles.headerButtons}>
+            <Modal
+                visible={visible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={onClose}
+            >
+                <View style={styles.fullScreenOverlay}>
+                    <View style={styles.fullScreenPopupContainer}>
+                        <View style={styles.popupHeader}>
+                            <View style={styles.headerContent}>
+                                <MaterialIcons name="chat" size={24} color="#3498db" />
+                                <View style={styles.headerTextContainer}>
+                                    <Text style={styles.headerTitle}>Live Chat - {selectedDepartment.toUpperCase()}</Text>
+                                    <Text style={styles.headerSubtitle}>Connected to agent ({selectedLanguage.toUpperCase()})</Text>
+                                </View>
+                            </View>
+                            <View style={styles.headerButtons}>
                         {/* Working Voice Call Button - Based on Successful Test */}
                         {chatId && (
                             <TouchableOpacity 
@@ -1051,7 +1092,9 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                     targetUserId={agentId || (selectedDepartment === 'doctor' ? AGENT_DOCTOR_UID : AGENT_PAYMENTS_UID)}
                     targetUserName={selectedDepartment === 'doctor' ? 'Doctor' : 'Payments Agent'}
                 />
-             </View>
+                    </View>
+                </View>
+            </Modal>
          );
      }
 
@@ -1060,6 +1103,26 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
 };
 
 const styles = StyleSheet.create({
+    fullScreenOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    fullScreenPopupContainer: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        width: '90%',
+        maxWidth: 400,
+        maxHeight: '80%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 10,
+        overflow: 'hidden',
+    },
     popupContainer: {
         position: 'absolute',
         bottom: 20,

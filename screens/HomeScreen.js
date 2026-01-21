@@ -23,10 +23,46 @@ const HomeScreen = () => {
 
     useEffect(() => {
         console.log('HomeScreen mounted');
+        
+        // Add custom styles for web to ensure chat button is visible
+        if (typeof document !== 'undefined') {
+            const style = document.createElement('style');
+            style.textContent = `
+                /* Ensure chat button is always visible */
+                .chat-button {
+                    position: fixed !important;
+                    bottom: 20px !important;
+                    right: 20px !important;
+                    z-index: 9999 !important;
+                    display: flex !important;
+                    visibility: visible !important;
+                }
+                
+                /* Custom scrollbar */
+                ::-webkit-scrollbar {
+                    width: 8px;
+                }
+                
+                ::-webkit-scrollbar-track {
+                    background: #f1f1f1;
+                }
+                
+                ::-webkit-scrollbar-thumb {
+                    background: #888;
+                    border-radius: 4px;
+                }
+                
+                ::-webkit-scrollbar-thumb:hover {
+                    background: #555;
+                }
+            `;
+            document.head.appendChild(style);
+        }
     }, []);
 
     const handleChatPress = () => {
-        console.log('Chat button pressed, opening chat popup');
+        console.log('🚀 Chat button pressed, opening chat popup');
+        console.log('🚀 Current state - showChatPopup:', showChatPopup);
         // Initialize audio permissions on first user interaction
         if (!audioInitialized) {
             initializeAudioPermissions();
@@ -102,124 +138,128 @@ const HomeScreen = () => {
     };
 
     return (
-        <ScrollView 
-            style={styles.scrollContainer} 
-            contentContainerStyle={styles.container}
-            showsVerticalScrollIndicator={true}
-            showsHorizontalScrollIndicator={false}
-            indicatorStyle="default"
-        >
-            {/* Language Selector and Volume Button */}
-            <View style={styles.topRightControls}>
-                <TouchableOpacity
-                    style={[styles.volumeButton, isReading && styles.volumeButtonActive]}
-                    onPress={handleReadPage}
-                >
-                    <MaterialIcons 
-                        name={isReading ? "volume_off" : "volume_up"} 
-                        size={24} 
-                        color={isReading ? "#e74c3c" : "#2c3e50"} 
-                    />
-                </TouchableOpacity>
-                <LanguageSelector />
-            </View>
-
-            {/* Hamburger Menu Button */}
-            <TouchableOpacity
-                style={styles.menuButton}
-                onPress={handleMenuPress}
+        <>
+            <ScrollView 
+                style={styles.scrollContainer} 
+                contentContainerStyle={styles.container}
+                showsVerticalScrollIndicator={true}
+                showsHorizontalScrollIndicator={false}
+                indicatorStyle="default"
             >
-                <MaterialIcons name="menu" size={30} color="#2c3e50" />
-            </TouchableOpacity>
-
-            {/* Live Base Services Logo */}
-            <Image
-                source={require('../lbs_header_logo2.png')} // LBS header logo
-                style={styles.logo}
-                resizeMode="contain" // Changed back to contain for logo display
-                onError={(error) => console.error('Image loading error:', error)}
-                onLoad={() => console.log('Logo loaded successfully')}
-            />
-
-            <Text style={styles.title}>
-                {t('welcome_title')}
-            </Text>
-            <Text style={styles.description}>
-                {t('welcome_subtitle')}
-            </Text>
-
-            {/* Care Services Content */}
-            <View style={styles.servicesContainer}>
-                {/* Single Comprehensive Care Services Section */}
-                <View style={styles.serviceSection}>
-                    <Text style={styles.serviceTitle}>
-                        {t('care_services_title')}
-                    </Text>
-                    <Text style={styles.serviceDescription}>
-                        {t('care_services_description')}
-                    </Text>
+                {/* Language Selector and Volume Button */}
+                <View style={styles.topRightControls}>
+                    <TouchableOpacity
+                        style={[styles.volumeButton, isReading && styles.volumeButtonActive]}
+                        onPress={handleReadPage}
+                    >
+                        <MaterialIcons 
+                            name={isReading ? "volume_off" : "volume_up"} 
+                            size={24} 
+                            color={isReading ? "#e74c3c" : "#2c3e50"} 
+                        />
+                    </TouchableOpacity>
+                    <LanguageSelector />
                 </View>
-            </View>
 
-            {/* Floating Action Button for Chat */}
+                {/* Hamburger Menu Button */}
+                <TouchableOpacity
+                    style={styles.menuButton}
+                    onPress={handleMenuPress}
+                >
+                    <MaterialIcons name="menu" size={30} color="#2c3e50" />
+                </TouchableOpacity>
+
+                {/* Live Base Services Logo */}
+                <Image
+                    source={require('../lbs_header_logo2.png')} // LBS header logo
+                    style={styles.logo}
+                    resizeMode="contain" // Changed back to contain for logo display
+                    onError={(error) => console.error('Image loading error:', error)}
+                    onLoad={() => console.log('Logo loaded successfully')}
+                />
+
+                <Text style={styles.title}>
+                    {t('welcome_title')}
+                </Text>
+                <Text style={styles.description}>
+                    {t('welcome_subtitle')}
+                </Text>
+
+                {/* Care Services Content */}
+                <View style={styles.servicesContainer}>
+                    {/* Single Comprehensive Care Services Section */}
+                    <View style={styles.serviceSection}>
+                        <Text style={styles.serviceTitle}>
+                            {t('care_services_title')}
+                        </Text>
+                        <Text style={styles.serviceDescription}>
+                            {t('care_services_description')}
+                        </Text>
+                    </View>
+                </View>
+
+                {/* Menu Modal */}
+                <Modal
+                    visible={showMenu}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={handleCloseMenu}
+                >
+                    <TouchableOpacity
+                        style={styles.modalOverlay}
+                        activeOpacity={1}
+                        onPress={handleCloseMenu}
+                    >
+                        <View style={styles.menuContainer}>
+                            <TouchableOpacity
+                                style={styles.menuItem}
+                                onPress={handleAdminPress}
+                            >
+                                <MaterialIcons name="admin-panel-settings" size={24} color="#2c3e50" />
+                                <Text style={styles.menuItemText}>
+                                    {t('admin')}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.menuItem}
+                                onPress={handleReviewsPress}
+                            >
+                                <MaterialIcons name="rate-review" size={24} color="#2c3e50" />
+                                <Text style={styles.menuItemText}>
+                                    {t('reviews')}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.menuItem, styles.lastMenuItem]}
+                                onPress={handleTextTranslatorPress}
+                            >
+                                <MaterialIcons name="translate" size={24} color="#2c3e50" />
+                                <Text style={styles.menuItemText}>
+                                    {t('text_translator')}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </TouchableOpacity>
+                </Modal>
+            </ScrollView>
+
+            {/* Floating Action Button for Chat - Outside ScrollView */}
             <TouchableOpacity
                 style={styles.chatButton}
                 onPress={handleChatPress}
+                accessibilityLabel="Open Chat"
+                accessibilityRole="button"
             >
-                <MaterialIcons name="chat" size={30} color="white" />
+                <MaterialIcons name="chat" size={28} color="white" />
             </TouchableOpacity>
 
-            {/* Menu Modal */}
-            <Modal
-                visible={showMenu}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={handleCloseMenu}
-            >
-                <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={handleCloseMenu}
-                >
-                    <View style={styles.menuContainer}>
-                        <TouchableOpacity
-                            style={styles.menuItem}
-                            onPress={handleAdminPress}
-                        >
-                            <MaterialIcons name="admin-panel-settings" size={24} color="#2c3e50" />
-                            <Text style={styles.menuItemText}>
-                                {t('admin')}
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.menuItem}
-                            onPress={handleReviewsPress}
-                        >
-                            <MaterialIcons name="rate-review" size={24} color="#2c3e50" />
-                            <Text style={styles.menuItemText}>
-                                {t('reviews')}
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.menuItem, styles.lastMenuItem]}
-                            onPress={handleTextTranslatorPress}
-                        >
-                            <MaterialIcons name="translate" size={24} color="#2c3e50" />
-                            <Text style={styles.menuItemText}>
-                                {t('text_translator')}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
-
-            {/* Chat Popup */}
+            {/* Chat Popup - Outside ScrollView for full screen display */}
             <ChatPopup 
                 visible={showChatPopup} 
                 onClose={() => setShowChatPopup(false)} 
                 onAgentSelect={handleAgentSelect}
             />
-        </ScrollView>
+        </>
     );
 };
 
@@ -230,6 +270,7 @@ const styles = StyleSheet.create({
     },
     container: {
         flexGrow: 1,
+        minHeight: '120vh', // Ensure enough height for scrolling
         alignItems: 'center',
         padding: 20,
         paddingTop: 100, // Account for top controls
@@ -332,10 +373,10 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
     },
     chatButton: {
-        position: 'absolute',
+        position: 'fixed',
         bottom: 30,
         right: 30,
-        backgroundColor: '#2ecc71',
+        backgroundColor: '#007AFF', // Beautiful blue color
         width: 60,
         height: 60,
         borderRadius: 30,
@@ -346,6 +387,10 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 5,
+        zIndex: 99999,
+        borderWidth: 0,
+        // Smooth animation and hover effects
+        transition: 'all 0.3s ease',
     },
     modalOverlay: {
         flex: 1,

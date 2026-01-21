@@ -1,8 +1,12 @@
-// Agora Configuration for Web with enhanced settings
+// Agora Configuration for Web - Testing Mode (No Tokens Required)
 export const AGORA_CONFIG = {
-    // *** IMPORTANT: Replace with your actual Agora App ID ***
+    // *** IMPORTANT: Replace with your NEW TESTING PROJECT App ID ***
     // You can find your App ID in your Agora Console: https://console.agora.io/
-    APP_ID: '1c6c3de34233498e941bee4e9e44a428', // Replace this with your actual App ID from Agora Console
+    APP_ID: '3abcebb9062c4a0cb6e5967b1f028cd9', // NEW Testing Project App ID
+    
+    // Authentication mode
+    USE_TOKEN: false, // Set to false for testing mode
+    TOKEN: null, // No token needed for testing mode
     
     // Channel configurations
     CHANNEL_PREFIX: 'lbs_chat_', // Prefix for channel names
@@ -14,7 +18,7 @@ export const AGORA_CONFIG = {
         bitrate: 128,
     },
     
-    // Default settings with enhanced configuration
+    // Default settings for testing mode
     DEFAULT_SETTINGS: {
         enableAudio: true,
         enableVideo: false, // Start with audio only
@@ -22,16 +26,17 @@ export const AGORA_CONFIG = {
         speakerEnabled: true,
     },
     
-    // Client configuration for better connectivity
+    // Client configuration for testing mode
     CLIENT_CONFIG: {
-        mode: 'rtc',
-        codec: 'vp8',
-        // Add cloud proxy settings for better connectivity
-        turnServer: {
-            turnServerURL: 'stun:stun.l.google.com:19302',
-            username: '',
-            password: ''
-        }
+        mode: 'rtc', // Use RTC mode for voice calls
+        codec: 'vp8' // VP8 codec for better compatibility
+    },
+    
+    // Testing mode specific settings
+    TESTING_MODE: {
+        enabled: true,
+        allowAnonymousUsers: true,
+        skipAuthentication: true
     }
 };
 

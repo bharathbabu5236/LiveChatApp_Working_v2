@@ -4,6 +4,10 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import AgoraRTC from 'agora-rtc-sdk-ng';
 import { AGORA_CONFIG } from '../config/agoraConfigWeb';
 import alternativeAgoraService from '../services/alternativeAgoraService';
+import { checkHTTPSAndMicrophone, isSecureContext } from '../utils/httpsHelper';
+import regionalAgoraHelper from '../services/regionalAgoraHelper';
+import { validateAgoraAppID } from '../utils/agoraValidator';
+import { debugAppId } from '../utils/debugAppId';
 
 const VoiceCallDebug = () => {
     const [debugInfo, setDebugInfo] = useState(null);
@@ -17,6 +21,10 @@ const VoiceCallDebug = () => {
         };
 
         try {
+            // Debug App ID configuration first
+            console.log('🔍 Starting comprehensive diagnostics...');
+            debugAppId();
+            
             // Check 1: SDK Availability
             info.checks.push({
                 name: 'Agora SDK',
@@ -24,7 +32,19 @@ const VoiceCallDebug = () => {
                 details: AgoraRTC ? `Version: ${AgoraRTC.VERSION || 'Unknown'}` : 'SDK not imported properly'
             });
 
-            // Check 2: App ID Configuration
+            // Check 2: App ID Validation
+            console.log('🔑 Validating Agora App ID...');
+            const appIdValidation = await validateAgoraAppID(AGORA_CONFIG?.APP_ID);
+            info.checks.push({
+                name: 'App ID Validation',
+                status: appIdValidation.valid === true ? '✅ Valid' : 
+                       appIdValidation.valid === false ? '❌ Invalid' : '⚠️ Unknown',
+                details: appIdValidation.valid === true ? appIdValidation.message :
+                        appIdValidation.error + (appIdValidation.suggestions ? 
+                        '\nSuggestions: ' + appIdValidation.suggestions.join(', ') : '')
+            });
+
+            // Check 3: App ID Configuration
             info.checks.push({
                 name: 'App ID Config',
                 status: AGORA_CONFIG?.APP_ID ? '✅ Present' : '❌ Missing',
@@ -33,15 +53,25 @@ const VoiceCallDebug = () => {
                     'No App ID configured'
             });
 
-            // Check 3: Browser Compatibility
-            const isWebRTCSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+            // Check 4: Security Context
+            const isSecure = isSecureContext();
             info.checks.push({
-                name: 'WebRTC Support',
-                status: isWebRTCSupported ? '✅ Supported' : '❌ Not Supported',
-                details: `getUserMedia: ${!!navigator.mediaDevices?.getUserMedia}`
+                name: 'Security Context',
+                status: isSecure ? '✅ Secure' : '⚠️ Insecure',
+                details: `Protocol: ${location.protocol}, Secure Context: ${window.isSecureContext}, Hostname: ${location.hostname}`
             });
 
-            // Check 4: Network Connectivity
+            // Check 5: Enhanced Microphone Test
+            const micTest = await checkHTTPSAndMicrophone();
+            info.checks.push({
+                name: 'Microphone Access',
+                status: micTest.success ? '✅ Available' : '❌ Not Available',
+                details: micTest.success ? 
+                    `Device: ${micTest.deviceInfo?.label || 'Default'}` : 
+                    `${micTest.error}. ${micTest.suggestion || ''}`
+            });
+
+            // Check 6: Network Connectivity
             try {
                 const startTime = Date.now();
                 await fetch('https://web-rtc-api.agora.io/v2/check', { 
@@ -60,24 +90,6 @@ const VoiceCallDebug = () => {
                     name: 'Agora Network',
                     status: '⚠️ Check Failed',
                     details: `Error: ${netError.message}`
-                });
-            }
-
-            // Check 5: Microphone Access
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const tracks = stream.getAudioTracks();
-                stream.getTracks().forEach(track => track.stop());
-                info.checks.push({
-                    name: 'Microphone',
-                    status: '✅ Available',
-                    details: `Device: ${tracks[0]?.label || 'Default'}`
-                });
-            } catch (micError) {
-                info.checks.push({
-                    name: 'Microphone',
-                    status: '❌ Not Available',
-                    details: `Error: ${micError.message}`
                 });
             }
 
@@ -138,6 +150,46 @@ const VoiceCallDebug = () => {
                         name: 'Alternative Join Test',
                         status: '❌ Failed',
                         details: `Alternative error: ${altError.message}`
+                    });
+                }
+
+                // Try regional connection testing
+                console.log('🌍 Testing regional Agora connections...');
+                try {
+                    const regionalResults = await regionalAgoraHelper.testConnectionMethods(AGORA_CONFIG.APP_ID);
+                    const workingMethod = regionalResults.find(r => r.success);
+                    
+                    info.checks.push({
+                        name: 'Regional Connection Test',
+                        status: workingMethod ? '✅ Found Working Method' : '❌ All Methods Failed',
+                        details: workingMethod ? 
+                            `Working method: ${workingMethod.method}` : 
+                            `All methods failed: ${regionalResults.map(r => r.method + ':' + r.error).join(', ')}`
+                    });
+                } catch (regionalError) {
+                    info.checks.push({
+                        name: 'Regional Connection Test',
+                        status: '❌ Test Failed',
+                        details: `Regional test error: ${regionalError.message}`
+                    });
+                }
+
+                // Perform advanced network diagnostics
+                console.log('🔍 Running network diagnostics...');
+                try {
+                    const networkDiag = await regionalAgoraHelper.performNetworkDiagnostics();
+                    networkDiag.forEach((diag, index) => {
+                        info.checks.push({
+                            name: `Network: ${diag.test}`,
+                            status: diag.result === 'SUCCESS' ? '✅ Success' : '❌ Failed',
+                            details: diag.details
+                        });
+                    });
+                } catch (diagError) {
+                    info.checks.push({
+                        name: 'Network Diagnostics',
+                        status: '❌ Failed',
+                        details: `Diagnostic error: ${diagError.message}`
                     });
                 }
             }

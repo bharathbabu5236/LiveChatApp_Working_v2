@@ -5,8 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth, appId } from '../firebaseConfig';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { translateMessage, testTranslation } from '../translationService';
-import DirectVoiceCallModal from '../components/DirectVoiceCallModal';
-import AgoraTestButton from '../components/AgoraTestButton';
+import WorkingVoiceCallModal from '../components/WorkingVoiceCallModal';
 
 const AgentChatScreen = ({ route, navigation }) => {
     const { chatId, customerId } = route.params;
@@ -17,7 +16,7 @@ const AgentChatScreen = ({ route, navigation }) => {
     const [agentLanguage, setAgentLanguage] = useState('en');
     const [translatedMessages, setTranslatedMessages] = useState({});
     const [agentMessageTranslations, setAgentMessageTranslations] = useState({});
-    const [showVoiceCall, setShowVoiceCall] = useState(false);
+    const [showWorkingVoiceCall, setShowWorkingVoiceCall] = useState(false);
     const scrollViewRef = useRef(null);
     const currentAgentId = auth.currentUser?.uid;
 
@@ -324,8 +323,8 @@ const handleCloseChat = () => {
     navigation.goBack();
 };
 
-const handleStartVoiceCall = async () => {
-    console.log('Agent voice call button clicked - chatId:', chatId, 'customerId:', customerId, 'agentId:', currentAgentId);
+const handleStartWorkingVoiceCall = async () => {
+    console.log('🎤 Agent WORKING voice call button clicked - chatId:', chatId, 'customerId:', customerId, 'agentId:', currentAgentId);
     
     if (!currentAgentId) {
         Alert.alert('Error', 'Agent not authenticated. Please log in again.');
@@ -337,13 +336,13 @@ const handleStartVoiceCall = async () => {
         return;
     }
     
-    console.log('Agent starting direct voice call with customer:', customerId);
-    setShowVoiceCall(true);
+    console.log('🎉 Agent starting WORKING voice call with customer:', customerId);
+    setShowWorkingVoiceCall(true);
 };
 
-const handleVoiceCallEnd = () => {
-    console.log('Agent voice call ended');
-    setShowVoiceCall(false);
+const handleWorkingVoiceCallEnd = () => {
+    console.log('🎉 Agent WORKING voice call ended');
+    setShowWorkingVoiceCall(false);
 };
 
 // Function to get placeholder text based on agent's language preference
@@ -494,12 +493,9 @@ const getLanguagePlaceholder = (language) => {
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Chat with User: {customerId?.substring(0, 8)}...</Text>
                 <View style={styles.headerButtons}>
-                    {/* Agora Test Button */}
-                    <AgoraTestButton />
-                    
-                    {/* Voice call button */}
-                    <TouchableOpacity onPress={handleStartVoiceCall} style={styles.voiceCallButton}>
-                        <MaterialIcons name="phone" size={20} color="white" />
+                    {/* Working Voice Call Button - Based on Successful Test */}
+                    <TouchableOpacity onPress={handleStartWorkingVoiceCall} style={[styles.voiceCallButton, { backgroundColor: '#e67e22' }]}>
+                        <MaterialIcons name="phone-in-talk" size={20} color="white" />
                     </TouchableOpacity>
                     <Text style={[styles.chatStatusText, chatStatus === 'closed' ? styles.statusClosed : styles.statusOpen]}>
                         Status: {chatStatus.charAt(0).toUpperCase() + chatStatus.slice(1)}
@@ -629,14 +625,13 @@ const getLanguagePlaceholder = (language) => {
                 </TouchableOpacity>
             </View>
 
-            {/* Voice Call Modal */}
-            <DirectVoiceCallModal
-                visible={showVoiceCall}
-                onClose={handleVoiceCallEnd}
+            {/* Working Voice Call Modal - Based on Successful Ultra Simple Test */}
+            <WorkingVoiceCallModal
+                visible={showWorkingVoiceCall}
+                onClose={handleWorkingVoiceCallEnd}
                 currentUserId={currentAgentId}
                 targetUserId={customerId}
                 targetUserName={`Customer ${customerId?.substring(0, 8)}...`}
-                isInitiator={true}
             />
         </View>
     );

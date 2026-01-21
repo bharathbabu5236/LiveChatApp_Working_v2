@@ -5,9 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth, appId, authReadyPromise, signInAnonymously } from '../firebaseConfig';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, getDocs, where } from 'firebase/firestore';
 import { translateMessage, getSupportedLanguagesArray, getNativeLanguageName, testTranslation } from '../translationService';
-import DirectVoiceCallModal from '../components/DirectVoiceCallModal';
-import AgoraTestButton from '../components/AgoraTestButton';
-import VoiceCallDebug from '../components/VoiceCallDebug';
+import WorkingVoiceCallModal from '../components/WorkingVoiceCallModal';
 
 const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const [messages, setMessages] = useState([]);
@@ -21,7 +19,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
     const [botStep, setBotStep] = useState('welcome'); // 'welcome', 'askName', 'askPhone', 'askLanguage', 'departmentSelection', 'chat'
     const [loadingChatSetup, setLoadingChatSetup] = useState(false);
     const [showScrollButton, setShowScrollButton] = useState(false);
-    const [showVoiceCall, setShowVoiceCall] = useState(false);
+    const [showWorkingVoiceCall, setShowWorkingVoiceCall] = useState(false);
     const [agentId, setAgentId] = useState(null);
     const [isMinimized, setIsMinimized] = useState(false);
     const [showLanguageModal, setShowLanguageModal] = useState(false);
@@ -558,8 +556,8 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
         setIsMinimized(!isMinimized);
     };
 
-    const handleStartVoiceCall = async () => {
-        console.log('Customer voice call button clicked - chatId:', chatId, 'agentId:', agentId, 'userId:', userId);
+    const handleStartWorkingVoiceCall = async () => {
+        console.log('🎤 Working voice call button clicked - chatId:', chatId, 'agentId:', agentId, 'userId:', userId);
         
         if (!userId) {
             Alert.alert('Error', 'User not authenticated. Please wait for chat to connect.');
@@ -581,13 +579,13 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
             return;
         }
         
-        console.log('Customer starting direct voice call with agent:', targetAgentId);
-        setShowVoiceCall(true);
+        console.log('🎉 Customer starting WORKING voice call with agent:', targetAgentId);
+        setShowWorkingVoiceCall(true);
     };
 
-    const handleVoiceCallEnd = () => {
-        console.log('Customer voice call ended');
-        setShowVoiceCall(false);
+    const handleWorkingVoiceCallEnd = () => {
+        console.log('🎉 Customer WORKING voice call ended');
+        setShowWorkingVoiceCall(false);
     };
 
     if (!visible) return null;
@@ -907,21 +905,15 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                         </View>
                     </View>
                     <View style={styles.headerButtons}>
-                        {/* Voice Call Diagnostics - Temporary Debug Tool */}
-                        <VoiceCallDebug />
-                        
-                        {/* Agora Test Button */}
-                        <AgoraTestButton />
-                        
-                        {/* Voice call button - show if chat is connected */}
+                        {/* Working Voice Call Button - Based on Successful Test */}
                         {chatId && (
                             <TouchableOpacity 
-                                style={styles.voiceCallButton} 
-                                onPress={handleStartVoiceCall}
+                                style={[styles.voiceCallButton, { backgroundColor: '#e67e22' }]} 
+                                onPress={handleStartWorkingVoiceCall}
                                 accessible={true}
                                 accessibilityLabel="Start voice call"
                             >
-                                <MaterialIcons name="phone" size={20} color="white" />
+                                <MaterialIcons name="phone-in-talk" size={20} color="white" />
                             </TouchableOpacity>
                         )}
                         <TouchableOpacity onPress={toggleMinimize} style={styles.minimizeButton}>
@@ -1051,14 +1043,13 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                     </TouchableOpacity>
                                  </View>
 
-                {/* Voice Call Modal */}
-                <DirectVoiceCallModal
-                    visible={showVoiceCall}
-                    onClose={handleVoiceCallEnd}
+                {/* Working Voice Call Modal - Based on Successful Ultra Simple Test */}
+                <WorkingVoiceCallModal
+                    visible={showWorkingVoiceCall}
+                    onClose={handleWorkingVoiceCallEnd}
                     currentUserId={userId}
                     targetUserId={agentId || (selectedDepartment === 'doctor' ? AGENT_DOCTOR_UID : AGENT_PAYMENTS_UID)}
                     targetUserName={selectedDepartment === 'doctor' ? 'Doctor' : 'Payments Agent'}
-                    isInitiator={true}
                 />
              </View>
          );

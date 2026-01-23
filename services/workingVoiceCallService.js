@@ -5,6 +5,7 @@ class WorkingVoiceCallService {
     constructor() {
         this.client = null;
         this.localAudioTrack = null;
+        this.localVideoTrack = null;
         this.isJoined = false;
         this.currentChannel = null;
         this.uid = null;
@@ -13,6 +14,9 @@ class WorkingVoiceCallService {
         this.onUserJoined = null;
         this.onUserLeft = null;
         this.onError = null;
+        this.onRemoteVideoAvailable = null;
+        this.onRemoteVideoUnavailable = null;
+        this.onLocalVideoAvailable = null;
     }
 
     // Start a voice call using the working approach
@@ -86,7 +90,7 @@ class WorkingVoiceCallService {
             if (this.onUserLeft) this.onUserLeft(user, reason);
         });
 
-        // User published audio
+        // User published audio/video
         this.client.on('user-published', async (user, mediaType) => {
             if (mediaType === 'audio') {
                 console.log('🎶 Remote user published audio:', user.uid);
@@ -98,6 +102,40 @@ class WorkingVoiceCallService {
                     }
                 } catch (error) {
                     console.error('Error subscribing to remote audio:', error);
+                }
+            } else if (mediaType === 'video') {
+                console.log('📹 Remote user published video:', user.uid);
+                try {
+                    await this.client.subscribe(user, mediaType);
+                    if (user.videoTrack) {
+                        // For React Native, you would play this to a video view
+                        // user.videoTrack.play('remote-video-container-id');
+                        console.log('📺 Remote video track available - ready to play');
+                        
+                        // Trigger callback if available
+                        if (this.onRemoteVideoAvailable) {
+                            this.onRemoteVideoAvailable(user.videoTrack);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error subscribing to remote video:', error);
+                }
+            }
+        });
+
+        // User unpublished
+        this.client.on('user-unpublished', (user, mediaType) => {
+            console.log('👋 Remote user unpublished:', user.uid, mediaType);
+            if (mediaType === 'audio' && user.audioTrack) {
+                user.audioTrack.stop();
+                console.log('🔇 Stopped remote audio');
+            } else if (mediaType === 'video' && user.videoTrack) {
+                user.videoTrack.stop();
+                console.log('📺 Stopped remote video');
+                
+                // Trigger callback if available
+                if (this.onRemoteVideoUnavailable) {
+                    this.onRemoteVideoUnavailable();
                 }
             }
         });
@@ -144,6 +182,63 @@ class WorkingVoiceCallService {
         return false;
     }
 
+    // Enable video
+    async enableVideo() {
+        try {
+            if (this.localVideoTrack) {
+                console.log('📹 Video track already exists');
+                return { success: true };
+            }
+
+            console.log('📹 Creating camera video track...');
+            this.localVideoTrack = await AgoraRTC.createCameraVideoTrack({
+                encoderConfig: "480p_1",
+                facingMode: "user" // Front camera for selfie view
+            });
+            
+            console.log('📢 Publishing video track...');
+            await this.client.publish([this.localVideoTrack]);
+            
+            console.log('✅ Video enabled and published!');
+            
+            // Auto-play local video for preview
+            if (this.onLocalVideoAvailable) {
+                this.onLocalVideoAvailable(this.localVideoTrack);
+            }
+            
+            return { success: true };
+            
+        } catch (error) {
+            console.error('❌ Failed to enable video:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Disable video
+    async disableVideo() {
+        try {
+            if (this.localVideoTrack) {
+                console.log('📹 Stopping and closing video track...');
+                
+                // Unpublish the video track
+                await this.client.unpublish([this.localVideoTrack]);
+                
+                // Stop and close the video track
+                this.localVideoTrack.stop();
+                this.localVideoTrack.close();
+                this.localVideoTrack = null;
+                
+                console.log('✅ Video disabled successfully');
+                return { success: true };
+            }
+            return { success: true }; // Already disabled
+            
+        } catch (error) {
+            console.error('❌ Failed to disable video:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
     // End voice call
     async endVoiceCall() {
         try {
@@ -171,6 +266,14 @@ class WorkingVoiceCallService {
                 console.log('🧹 Local audio track cleaned up');
             }
 
+            // Stop and close local video track
+            if (this.localVideoTrack) {
+                this.localVideoTrack.stop();
+                this.localVideoTrack.close();
+                this.localVideoTrack = null;
+                console.log('🧹 Local video track cleaned up');
+            }
+
             // Leave the channel
             if (this.client && this.isJoined) {
                 await this.client.leave();
@@ -193,8 +296,29 @@ class WorkingVoiceCallService {
             isJoined: this.isJoined,
             channel: this.currentChannel,
             uid: this.uid,
-            hasMicrophone: !!this.localAudioTrack
+            hasMicrophone: !!this.localAudioTrack,
+            hasVideo: !!this.localVideoTrack
         };
+    }
+
+    // Get local video track for preview
+    getLocalVideoTrack() {
+        return this.localVideoTrack;
+    }
+
+    // Switch camera (front/back)
+    async switchCamera() {
+        try {
+            if (this.localVideoTrack) {
+                await this.localVideoTrack.switchDevice();
+                console.log('📹 Camera switched successfully');
+                return { success: true };
+            }
+            return { success: false, error: 'No video track available' };
+        } catch (error) {
+            console.error('❌ Failed to switch camera:', error);
+            return { success: false, error: error.message };
+        }
     }
 }
 

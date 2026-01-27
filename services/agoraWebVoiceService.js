@@ -5,6 +5,7 @@ class AgoraWebVoiceService {
     constructor() {
         this.client = null;
         this.localAudioTrack = null;
+        this.localVideoTrack = null;
         this.remoteUsers = {};
         this.isJoined = false;
         this.currentChannel = null;
@@ -15,6 +16,8 @@ class AgoraWebVoiceService {
         this.onUserLeft = null;
         this.onConnectionStateChanged = null;
         this.onError = null;
+        this.onRemoteVideoAvailable = null;
+        this.onRemoteVideoUnavailable = null;
     }
 
     // Initialize Agora client for web with enhanced error handling and cloud proxy
@@ -98,7 +101,7 @@ class AgoraWebVoiceService {
             if (this.onUserLeft) this.onUserLeft(user, reason);
         });
 
-        // User published audio
+        // User published audio/video
         this.client.on('user-published', async (user, mediaType) => {
             if (mediaType === 'audio' && this.client) {
                 console.log('Web: User published audio:', user.uid);
@@ -112,6 +115,20 @@ class AgoraWebVoiceService {
                 } catch (error) {
                     console.error('Web: Error subscribing to audio:', error);
                 }
+            } else if (mediaType === 'video' && this.client) {
+                console.log('Web: User published video:', user.uid);
+                try {
+                    await this.client.subscribe(user, mediaType);
+                    // Handle remote video
+                    if (user.videoTrack) {
+                        console.log('Web: Remote video track available');
+                        if (this.onRemoteVideoAvailable) {
+                            this.onRemoteVideoAvailable(user.videoTrack);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Web: Error subscribing to video:', error);
+                }
             }
         });
 
@@ -121,6 +138,12 @@ class AgoraWebVoiceService {
             if (mediaType === 'audio' && user.audioTrack) {
                 user.audioTrack.stop();
                 console.log('Web: Stopped remote audio track');
+            } else if (mediaType === 'video' && user.videoTrack) {
+                user.videoTrack.stop();
+                console.log('Web: Stopped remote video track');
+                if (this.onRemoteVideoUnavailable) {
+                    this.onRemoteVideoUnavailable();
+                }
             }
         });
 
@@ -266,10 +289,21 @@ class AgoraWebVoiceService {
                 console.log('Web: Local audio track stopped and closed');
             }
 
-            // Stop all remote audio tracks
+            // Stop and close local video track
+            if (this.localVideoTrack) {
+                this.localVideoTrack.stop();
+                this.localVideoTrack.close();
+                this.localVideoTrack = null;
+                console.log('Web: Local video track stopped and closed');
+            }
+
+            // Stop all remote tracks
             Object.values(this.remoteUsers).forEach(user => {
                 if (user.audioTrack) {
                     user.audioTrack.stop();
+                }
+                if (user.videoTrack) {
+                    user.videoTrack.stop();
                 }
             });
 
@@ -454,6 +488,92 @@ class AgoraWebVoiceService {
             return true;
         } catch (error) {
             console.error('Web: Microphone permission denied:', error);
+            return false;
+        }
+    }
+
+    // Enable video for web
+    async enableVideo() {
+        try {
+            if (this.localVideoTrack) {
+                console.log('Web: Video track already exists');
+                return { success: true };
+            }
+
+            console.log('Web: Creating camera video track...');
+            this.localVideoTrack = await AgoraRTC.createCameraVideoTrack({
+                encoderConfig: "480p_1",
+                facingMode: "user" // Front camera for selfie view
+            });
+            
+            console.log('Web: Publishing video track...');
+            if (this.client && this.isJoined) {
+                await this.client.publish([this.localVideoTrack]);
+                console.log('Web: Published local video track');
+            }
+            
+            console.log('Web: Video enabled successfully');
+            return { success: true };
+            
+        } catch (error) {
+            console.error('Web: Failed to enable video:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            return { success: false, error: errorMessage };
+        }
+    }
+
+    // Disable video for web
+    async disableVideo() {
+        try {
+            if (this.localVideoTrack) {
+                if (this.client && this.isJoined) {
+                    await this.client.unpublish([this.localVideoTrack]);
+                    console.log('Web: Unpublished local video track');
+                }
+                this.localVideoTrack.stop();
+                this.localVideoTrack.close();
+                this.localVideoTrack = null;
+                console.log('Web: Local video track stopped and closed');
+            }
+            console.log('Web: Video disabled successfully');
+            return { success: true };
+        } catch (error) {
+            console.error('Web: Failed to disable video:', error);
+            return { success: false };
+        }
+    }
+
+    // Get local video track
+    getLocalVideoTrack() {
+        return this.localVideoTrack;
+    }
+
+    // Switch camera (front/back)
+    async switchCamera() {
+        try {
+            if (this.localVideoTrack) {
+                await this.localVideoTrack.switchDevice();
+                console.log('Web: Camera switched successfully');
+                return { success: true };
+            }
+            return { success: false, error: 'No video track available' };
+        } catch (error) {
+            console.error('Web: Failed to switch camera:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    // Mute/unmute video track
+    async setVideoMuted(muted) {
+        try {
+            if (this.localVideoTrack) {
+                await this.localVideoTrack.setMuted(muted);
+                console.log('Web: Video', muted ? 'muted' : 'unmuted');
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Web: Failed to toggle video:', error);
             return false;
         }
     }

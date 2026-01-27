@@ -15,8 +15,27 @@ const WorkingVoiceCallModal = ({
     const [isVideoEnabled, setIsVideoEnabled] = useState(false);
     const [callDuration, setCallDuration] = useState(0);
     const [isRemoteUserConnected, setIsRemoteUserConnected] = useState(false);
+    const [isRemoteVideoPlaying, setIsRemoteVideoPlaying] = useState(false);
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
+
+    // helper to apply sizing to any injected <video> elements
+    const applyVideoElementStyles = (container) => {
+        if (!container) return;
+        // If Agora injected a <video> element, ensure it fills the container
+        try {
+            const videoEl = container.querySelector ? container.querySelector('video') : (container.getElementsByTagName ? container.getElementsByTagName('video')[0] : null);
+            if (videoEl) {
+                videoEl.style.width = '100%';
+                videoEl.style.height = '100%';
+                videoEl.style.objectFit = 'cover';
+                videoEl.style.display = 'block';
+            }
+        } catch (e) {
+            // ignore DOM access errors
+            console.warn('Could not apply video element styles', e);
+        }
+    };
 
     // Timer for call duration
     useEffect(() => {
@@ -77,29 +96,79 @@ const WorkingVoiceCallModal = ({
             );
         };
 
-        // Set up video event handlers
-        workingVoiceCallService.onRemoteVideoAvailable = (videoTrack) => {
-            console.log('📹 Remote video available');
-            if (remoteVideoRef.current) {
-                try {
-                    videoTrack.play(remoteVideoRef.current);
-                    console.log('📺 Remote video playing');
-                } catch (error) {
-                    console.error('Failed to play remote video:', error);
+            // Set up video event handlers
+            workingVoiceCallService.onRemoteVideoAvailable = (videoTrack) => {
+                console.log('📹 Remote video available');
+                if (remoteVideoRef.current) {
+                    try {
+                        videoTrack.play(remoteVideoRef.current);
+                        // Ensure injected <video> fills container
+                        setTimeout(() => applyVideoElementStyles(remoteVideoRef.current), 50);
+                        setIsRemoteVideoPlaying(true); // Hide placeholder text
+                        console.log('📺 Remote video playing');
+                    } catch (error) {
+                        console.error('Failed to play remote video:', error);
+                    }
                 }
-            }
-        };
+            };
 
-        workingVoiceCallService.onRemoteVideoUnavailable = () => {
-            console.log('📹 Remote video unavailable');
-            // Clear remote video view
-        };            // Start the call using our proven working method
+            workingVoiceCallService.onRemoteVideoUnavailable = () => {
+                console.log('📹 Remote video unavailable');
+                setIsRemoteVideoPlaying(false); // Show placeholder text again
+                // Clear remote video view
+                if (remoteVideoRef.current) {
+                    // remove child nodes if any
+                    try { remoteVideoRef.current.innerHTML = ''; } catch(e){}
+                }
+            };
+
+            // Also handle local video preview callback
+            workingVoiceCallService.onLocalVideoAvailable = (videoTrack) => {
+                if (localVideoRef.current) {
+                    try {
+                        videoTrack.play(localVideoRef.current);
+                        setTimeout(() => applyVideoElementStyles(localVideoRef.current), 50);
+                        console.log('📹 Local preview playing');
+                    } catch (e) {
+                        console.error('Failed to play local preview', e);
+                    }
+                }
+            };
+
+        // Pre-request camera permissions for smoother video enabling
+        try {
+            workingVoiceCallService.checkCameraPermission().then(hasPermission => {
+                if (!hasPermission) {
+                    console.log('📹 Camera permission not granted, user will be prompted when enabling video');
+                } else {
+                    console.log('📹 Camera permission already granted');
+                }
+            });
+        } catch (error) {
+            console.log('📹 Could not check camera permission:', error);
+        }
+
+        // Start the call using our proven working method
             const result = await workingVoiceCallService.startVoiceCall(channelName, currentUserId);
 
             if (result.success) {
                 console.log('✅ Working voice call started successfully!');
                 // We're connected, waiting for the other user
                 setCallStatus('connected');
+
+                // If a remote video track was already published before UI mounted, play it
+                const existing = workingVoiceCallService.getRemoteVideoTrack && workingVoiceCallService.getRemoteVideoTrack();
+                if (existing && remoteVideoRef.current) {
+                    try {
+                        existing.play(remoteVideoRef.current);
+                        setTimeout(() => applyVideoElementStyles(remoteVideoRef.current), 50);
+                        setIsRemoteVideoPlaying(true); // Hide placeholder text
+                        console.log('📺 Played existing remote video track');
+                    } catch (e) {
+                        console.warn('Could not play existing remote video track', e);
+                    }
+                }
+
             } else {
                 console.error('❌ Working voice call failed:', result);
                 Alert.alert(
@@ -129,14 +198,19 @@ const WorkingVoiceCallModal = ({
     const toggleVideo = async () => {
         if (isVideoEnabled) {
             // Disable video
-            const success = await workingVoiceCallService.disableVideo();
-            if (success) {
+            const result = await workingVoiceCallService.disableVideo();
+            if (result.success) {
                 setIsVideoEnabled(false);
+                setIsRemoteVideoPlaying(false); // Reset remote video state
+                // clear local preview
+                if (localVideoRef.current) {
+                    try { localVideoRef.current.innerHTML = ''; } catch(e){}
+                }
             }
         } else {
             // Enable video
-            const success = await workingVoiceCallService.enableVideo();
-            if (success) {
+            const result = await workingVoiceCallService.enableVideo();
+            if (result.success) {
                 setIsVideoEnabled(true);
                 // Start local video preview
                 setTimeout(() => {
@@ -144,12 +218,46 @@ const WorkingVoiceCallModal = ({
                     if (videoTrack && localVideoRef.current) {
                         try {
                             videoTrack.play(localVideoRef.current);
+                            setTimeout(() => applyVideoElementStyles(localVideoRef.current), 50);
                             console.log('📹 Local video preview started');
                         } catch (error) {
                             console.error('Failed to start local video preview:', error);
                         }
                     }
+
+                    // If remote track already exists, play it into the remote container
+                    const remoteTrack = workingVoiceCallService.getRemoteVideoTrack && workingVoiceCallService.getRemoteVideoTrack();
+                    if (remoteTrack && remoteVideoRef.current) {
+                        try {
+                            remoteTrack.play(remoteVideoRef.current);
+                            setTimeout(() => applyVideoElementStyles(remoteVideoRef.current), 50);
+                            setIsRemoteVideoPlaying(true); // Hide placeholder text
+                            console.log('📺 Remote video playing after enabling local video');
+                        } catch (e) {
+                            console.warn('Could not play remote track after enabling local video', e);
+                        }
+                    }
                 }, 500);
+            } else {
+                // Show error if video failed to enable
+                Alert.alert(
+                    'Camera Error', 
+                    result.error || 'Failed to enable camera. Please check your camera permissions.',
+                    [
+                        { text: 'OK' },
+                        { 
+                            text: 'Check Permissions', 
+                            onPress: () => {
+                                // Guide user to check browser permissions
+                                Alert.alert(
+                                    'Camera Permissions',
+                                    'Please allow camera access in your browser settings and try again.\n\n1. Click the camera icon in your browser address bar\n2. Allow camera access for this site\n3. Refresh the page if needed',
+                                    [{ text: 'OK' }]
+                                );
+                            }
+                        }
+                    ]
+                );
             }
         }
     };
@@ -223,7 +331,7 @@ const WorkingVoiceCallModal = ({
                                     ref={localVideoRef}
                                     style={{
                                         width: '100%',
-                                        height: 120,
+                                        height: 150,
                                         backgroundColor: '#f8f9fa',
                                         borderRadius: 8,
                                         border: '2px solid #27ae60',
@@ -253,7 +361,7 @@ const WorkingVoiceCallModal = ({
                                     ref={remoteVideoRef}
                                     style={{
                                         width: '100%',
-                                        height: 120,
+                                        height: 150,
                                         backgroundColor: '#f8f9fa',
                                         borderRadius: 8,
                                         border: '2px solid #3498db',
@@ -277,13 +385,15 @@ const WorkingVoiceCallModal = ({
                                     }}>
                                         Remote Video
                                     </div>
-                                    <div style={{
-                                        fontSize: 12,
-                                        color: '#666',
-                                        textAlign: 'center'
-                                    }}>
-                                        Waiting for remote video...
-                                    </div>
+                                    {!isRemoteVideoPlaying && (
+                                        <div style={{
+                                            fontSize: 12,
+                                            color: '#666',
+                                            textAlign: 'center'
+                                        }}>
+                                            Waiting for remote video...
+                                        </div>
+                                    )}
                                 </div>
                             </View>
                         </View>
@@ -384,7 +494,7 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         padding: 30,
         width: '85%',
-        maxWidth: 400,
+        maxWidth: 700, // increase to accommodate video without forcing shrink
         alignItems: 'center',
     },
     header: {
@@ -503,13 +613,14 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         marginVertical: 15,
         paddingHorizontal: 10,
+        width: '100%'
     },
     localVideoContainer: {
-        flex: 1,
+        flexBasis: '48%',
         marginRight: 5,
     },
     remoteVideoContainer: {
-        flex: 1,
+        flexBasis: '48%',
         marginLeft: 5,
     },
     videoLabel: {

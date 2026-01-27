@@ -6,6 +6,7 @@ class WorkingVoiceCallService {
         this.client = null;
         this.localAudioTrack = null;
         this.localVideoTrack = null;
+        this.remoteVideoTrack = null; // store latest remote video track
         this.isJoined = false;
         this.currentChannel = null;
         this.uid = null;
@@ -34,10 +35,8 @@ class WorkingVoiceCallService {
                 codec: 'vp8' 
             });
             
-            // Set up event listeners
-            this.setupEventListeners();
-            
-            // Generate UID
+        // Set up event listeners
+        this.setupEventListeners();            // Generate UID
             this.uid = userId || Math.floor(Math.random() * 100000);
             
             console.log('🚀 Joining voice call channel...');
@@ -87,6 +86,13 @@ class WorkingVoiceCallService {
         // User left
         this.client.on('user-left', (user, reason) => {
             console.log('👋 Remote user left voice call:', user.uid, 'Reason:', reason);
+            // Clear stored remote video track when a user leaves
+            if (this.remoteVideoTrack) {
+                try {
+                    this.remoteVideoTrack.stop();
+                } catch (e) {}
+                this.remoteVideoTrack = null;
+            }
             if (this.onUserLeft) this.onUserLeft(user, reason);
         });
 
@@ -108,11 +114,12 @@ class WorkingVoiceCallService {
                 try {
                     await this.client.subscribe(user, mediaType);
                     if (user.videoTrack) {
-                        // For React Native, you would play this to a video view
-                        // user.videoTrack.play('remote-video-container-id');
                         console.log('📺 Remote video track available - ready to play');
-                        
-                        // Trigger callback if available
+
+                        // Store remote video track so UI can mount it later
+                        this.remoteVideoTrack = user.videoTrack;
+
+                        // Trigger callback with video track if UI has registered handler
                         if (this.onRemoteVideoAvailable) {
                             this.onRemoteVideoAvailable(user.videoTrack);
                         }
@@ -127,13 +134,16 @@ class WorkingVoiceCallService {
         this.client.on('user-unpublished', (user, mediaType) => {
             console.log('👋 Remote user unpublished:', user.uid, mediaType);
             if (mediaType === 'audio' && user.audioTrack) {
-                user.audioTrack.stop();
+                try { user.audioTrack.stop(); } catch (e) {}
                 console.log('🔇 Stopped remote audio');
-            } else if (mediaType === 'video' && user.videoTrack) {
-                user.videoTrack.stop();
+            } else if (mediaType === 'video') {
+                try {
+                    if (user.videoTrack) user.videoTrack.stop();
+                } catch (e) {}
                 console.log('📺 Stopped remote video');
-                
-                // Trigger callback if available
+
+                // Clear stored remote track and notify UI
+                this.remoteVideoTrack = null;
                 if (this.onRemoteVideoUnavailable) {
                     this.onRemoteVideoUnavailable();
                 }
@@ -191,8 +201,25 @@ class WorkingVoiceCallService {
             }
 
             console.log('📹 Creating camera video track...');
+            console.log('📹 Requesting camera permissions...');
+            
+            // Request camera and microphone permissions explicitly
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: false // Only request video permission here
+                });
+                // Stop the test stream immediately
+                stream.getTracks().forEach(track => track.stop());
+                console.log('📹 Camera permission granted');
+            } catch (permError) {
+                console.error('📹 Camera permission denied:', permError);
+                return { success: false, error: 'Camera permission denied. Please allow camera access.' };
+            }
+
             this.localVideoTrack = await AgoraRTC.createCameraVideoTrack({
                 encoderConfig: "480p_1",
+                optimizationMode: "motion", // Better for video calls
                 facingMode: "user" // Front camera for selfie view
             });
             
@@ -210,7 +237,17 @@ class WorkingVoiceCallService {
             
         } catch (error) {
             console.error('❌ Failed to enable video:', error);
-            return { success: false, error: error.message };
+            let errorMessage = 'Failed to enable camera';
+            
+            if (error.message.includes('Permission')) {
+                errorMessage = 'Camera permission denied. Please allow camera access and try again.';
+            } else if (error.message.includes('NotFoundError')) {
+                errorMessage = 'No camera found. Please check your camera is connected.';
+            } else if (error.message.includes('NotAllowedError')) {
+                errorMessage = 'Camera access blocked. Please allow camera permissions in your browser.';
+            }
+            
+            return { success: false, error: errorMessage };
         }
     }
 
@@ -306,6 +343,11 @@ class WorkingVoiceCallService {
         return this.localVideoTrack;
     }
 
+    // Get remote video track if available
+    getRemoteVideoTrack() {
+        return this.remoteVideoTrack;
+    }
+
     // Switch camera (front/back)
     async switchCamera() {
         try {
@@ -318,6 +360,37 @@ class WorkingVoiceCallService {
         } catch (error) {
             console.error('❌ Failed to switch camera:', error);
             return { success: false, error: error.message };
+        }
+    }
+
+    // Check camera permission
+    async checkCameraPermission() {
+        try {
+            if (navigator.permissions && navigator.permissions.query) {
+                const permission = await navigator.permissions.query({ name: 'camera' });
+                console.log('📹 Camera permission:', permission.state);
+                return permission.state === 'granted';
+            }
+            return false;
+        } catch (error) {
+            console.warn('📹 Could not check camera permission:', error);
+            return false;
+        }
+    }
+
+    // Request camera permission
+    async requestCameraPermission() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: true, 
+                audio: false 
+            });
+            stream.getTracks().forEach(track => track.stop()); // Stop the test stream
+            console.log('📹 Camera permission granted');
+            return true;
+        } catch (error) {
+            console.error('📹 Camera permission denied:', error);
+            return false;
         }
     }
 }

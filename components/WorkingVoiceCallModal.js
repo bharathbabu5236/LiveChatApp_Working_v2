@@ -317,7 +317,7 @@ const WorkingVoiceCallModal = ({
                         </Text>
                     </View>
 
-                    {/* Call Duration */}
+                    {/* Call Durationnn */}
                     {callStatus === 'connected' && (
                         <Text style={styles.duration}>{formatDuration(callDuration)}</Text>
                     )}

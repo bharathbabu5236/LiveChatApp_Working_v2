@@ -1,116 +1,540 @@
-# Agora Voice Calling Setup Guide - Web Version
+# Agora Voice & Video Calling Setup Guide - Web Version
 
 ## 🚀 Setup Instructions
 
 ### 1. Update Agora App ID
 1. Open `config/agoraConfigWeb.js`
-2. Replace `YOUR_AGORA_APP_ID_HERE` with your actual Agora App ID
-3. Your App ID can be found in the [Agora Console](https://console.agora.io/)
+2. Replace `YOUR_AGORA_APP_ID_HERE` with your actual Agora App ID from [Agora Console](https://console.agora.io/)
+3. Ensure your Agora project has both **Voice Calling** and **Video Calling** enabled
 
-### 2. Voice Call Features
+### 2. Voice & Video Call Features
 
 #### ✅ Implemented Features:
+
+**Voice Calling Features:**
 - **Web-native voice calling** using Agora Web SDK
-- **Real-time audio communication**
-- **Modern web UI** with CSS animations
-- **Microphone permissions handling**
-- **Mute/unmute functionality**
-- **Volume control**
-- **Call duration tracking**
-- **Connection quality indicators**
-- **Automatic channel management**
+- **Real-time audio communication** with low latency
+- **Microphone permissions handling** with user-friendly prompts
+- **Mute/unmute functionality** during calls
+- **Volume control** and audio level monitoring
+- **Call duration tracking** with live timer
+- **Connection quality indicators** and network stats
+- **Automatic channel management** with unique room IDs
 - **Device selection** (microphone switching)
+
+**Video Calling Features:**
+- **HD video calling** with camera support
+- **Local video preview** for self-view
+- **Remote video streaming** for participant view
+- **Video toggle** (enable/disable during call)
+- **Camera switching** (front/back camera)
+- **Responsive video containers** with optimal sizing
+- **Video quality optimization** (480p default, configurable)
+- **Picture-in-picture layout** for dual video streams
+
+**Shared Features:**
+- **Modern web UI** with CSS animations and responsive design
+- **Cross-browser compatibility** (Chrome, Firefox, Safari, Edge)
+- **Error handling** with user-friendly messages
+- **Permission management** for camera and microphone
+- **Real-time status updates** and connection monitoring
 
 #### 🎯 How It Works:
 1. **Start a chat** with a department (Doctor or Payments)
 2. **Voice call button** appears in the chat header (phone icon)
 3. **Click the phone button** to start a voice call
-4. **Browser will request microphone permission**
+4. **Browser will request microphone permission** 
 5. **Both parties** will be connected to the same voice channel
-6. **Use controls** to mute/unmute and adjust volume during the call
-7. **End call** using the red button
+6. **Enable video** by clicking the video camera button during the call
+7. **Camera permission** will be requested when enabling video
+8. **Use controls** to mute/unmute, toggle video, and switch cameras
+9. **End call** using the red button
 
-### 3. File Structure (Web Version)
+### 3. Video Call Controls
+
+#### 📹 Video Features:
+- **Video Toggle**: Enable/disable video during an active call
+- **Local Preview**: See your own video feed before and during calls
+- **Remote Video**: View the other participant's video stream
+- **Camera Switch**: Toggle between front/back cameras (mobile/laptop)
+- **Video Quality**: Automatic optimization based on network conditions
+- **Layout Management**: Responsive containers that adjust to video presence
+
+#### 🎮 Call Controls:
+```javascript
+// Available controls in the call interface:
+- 🎤 Mute/Unmute microphone
+- 📹 Enable/Disable video
+- 🔄 Switch camera (front/back)
+- 📞 End call
+- 🔊 Volume control
+```
+
+### 4. File Structure (Web Version)
 ```
 config/
-  └── agoraConfigWeb.js       # Web-specific Agora configuration
+  └── agoraConfigWeb.js          # Web-specific Agora configuration
 services/
-  └── agoraWebVoiceService.js # Web voice calling service
+  ├── agoraWebVoiceService.js    # Web voice calling service (alternative)
+  └── workingVoiceCallService.js # Primary voice & video service (recommended)
 components/
-  ├── VoiceCallWebModal.js    # Web voice call UI component
-  └── VoiceCallModal.css      # Styling for voice call interface
+  ├── WorkingVoiceCallModal.js   # Main voice & video call UI component
+  └── ChatPopup.js              # Chat interface with call integration
 screens/
-  └── ChatScreen.js           # Updated with web voice call integration
+  └── ChatScreen.js             # Updated with voice & video call features
 ```
 
-### 4. Web-Specific Features
-- **Browser microphone access** with proper permission handling
+### 5. Core Implementation Files
+
+#### 📋 Primary Service: `workingVoiceCallService.js`
+```javascript
+// Main service handling both voice and video calls
+class WorkingVoiceCallService {
+  // Voice call methods
+  async startVoiceCall(channelName, userId)
+  async enableMicrophone()
+  async setMicrophoneMuted(muted)
+  
+  // Video call methods
+  async enableVideo()
+  async disableVideo() 
+  async switchCamera()
+  getLocalVideoTrack()
+  getRemoteVideoTrack()
+  
+  // Call management
+  async endVoiceCall()
+  async cleanup()
+}
+```
+
+#### 🎨 UI Component: `WorkingVoiceCallModal.js`
+```javascript
+// React component with full voice & video UI
+const WorkingVoiceCallModal = ({
+  visible,
+  onClose, 
+  currentUserId,
+  targetUserId,
+  targetUserName
+}) => {
+  // State management for call status, video, audio
+  // Local and remote video refs
+  // Call control handlers
+  // Real-time status updates
+}
+```
+
+### 6. Web-Specific Features
+- **Browser microphone & camera access** with proper permission handling
 - **CSS-based modern UI** with animations and responsive design
-- **Web audio APIs** for optimal audio quality
-- **Device enumeration** for microphone selection
+- **Web audio/video APIs** for optimal quality
+- **Device enumeration** for microphone and camera selection
 - **Browser compatibility** checks and fallbacks
+- **Responsive video containers** that adapt to screen size
+- **Real-time video element styling** with object-fit optimization
 
-### 5. Required Browser Permissions
-The voice calling will request:
+### 7. Required Browser Permissions
+The voice & video calling will request:
 - **Microphone access** (required for voice calls)
+- **Camera access** (required when enabling video)
 - Automatically handled by the browser and Agora Web SDK
-- User-friendly permission request flow
+- User-friendly permission request flow with guidance
 
-### 6. Testing Your Web Voice Call
-1. **Open your web app** in a modern browser (Chrome, Firefox, Safari, Edge)
+### 8. Testing Your Web Voice & Video Call
+
+#### 🔬 Basic Testing Steps:
+1. **Open your web app** in a modern browser (Chrome recommended)
 2. **Start a chat** in one browser tab/window
 3. **Open another browser tab** as a different user or agent
-4. **Join the same chat** 
+4. **Join the same chat**
 5. **Click the phone icon** in either chat to start voice call
 6. **Allow microphone access** when prompted
 7. **Both users** should be connected for voice communication
 
-### 7. Browser Compatibility
-- ✅ **Chrome** (recommended)
-- ✅ **Firefox**
-- ✅ **Safari** (macOS/iOS)
-- ✅ **Edge**
-- ⚠️ **Mobile browsers** (limited functionality)
+#### 📹 Video Testing Steps:
+1. **Start a voice call** (follow steps above)
+2. **Click the video camera button** in the call interface
+3. **Allow camera access** when prompted by browser
+4. **Verify local video preview** appears in your container
+5. **Check remote video** appears in the other participant's view
+6. **Test video controls**: toggle video on/off, switch camera
+7. **Verify video quality** and proper container sizing
 
-### 8. Production Considerations
+#### 🧪 Advanced Testing:
+```bash
+# Test different scenarios:
+- Voice-only calls
+- Video-enabled calls
+- Camera switching during calls
+- Mute/unmute during video calls
+- Network quality changes
+- Browser permission denial/recovery
+```
+
+### 9. Browser Compatibility
+
+#### ✅ Fully Supported:
+- **Chrome 70+** (recommended for best performance)
+- **Firefox 75+** 
+- **Safari 13+** (macOS/iOS)
+- **Edge 79+** (Chromium-based)
+
+#### ⚠️ Limited Support:
+- **Mobile browsers** (video may have limitations)
+- **Older browsers** (fallback to voice-only)
+
+#### 📱 Mobile Browser Notes:
+- iOS Safari: Video calling supported on iOS 13+
+- Android Chrome: Full video support on Android 8+
+- Mobile video quality automatically optimized
+
+### 10. Video Quality & Performance
+
+#### 📊 Video Quality Settings:
+```javascript
+// Default video configuration
+const videoConfig = {
+  encoderConfig: "480p_1",           // 640x480 resolution
+  optimizationMode: "motion",        // Better for video calls
+  facingMode: "user"                 // Front camera default
+};
+
+// Available quality options:
+- 120p: 160x120 (low bandwidth)
+- 240p: 320x240 (mobile optimized) 
+- 480p: 640x480 (default, balanced)
+- 720p: 1280x720 (high quality)
+- 1080p: 1920x1080 (premium quality)
+```
+
+#### ⚡ Performance Optimization:
+- **Adaptive bitrate**: Automatically adjusts based on network
+- **Hardware acceleration**: Uses device GPU when available
+- **Bandwidth management**: Optimizes for call quality
+- **CPU usage**: Minimal impact on device performance
+
+### 11. Production Considerations
+#### 🔐 Security & Authentication:
 - **Token-based authentication**: Currently using `null` token for testing
-- **HTTPS required**: Voice calling requires secure connection in production
-- **Error handling**: Comprehensive error handling implemented
-- **Call quality**: Optimized audio settings for clear communication
-- **Responsive design**: Works on desktop and mobile browsers
+- **Channel encryption**: Enable for production environments
+- **User authentication**: Integrate with your user management system
+- **HTTPS required**: Voice & video calling requires secure connection
 
-### 🔧 Advanced Features
-- **Connection quality monitoring**
-- **Network statistics tracking**
-- **Device switching during calls**
-- **Volume level control**
-- **Call duration display**
-- **Visual connection indicators**
+#### 🚀 Performance & Scaling:
+- **Concurrent calls**: Agora supports thousands of simultaneous calls
+- **Global infrastructure**: Low-latency servers worldwide
+- **Auto-scaling**: Handles traffic spikes automatically
+- **Analytics**: Built-in call quality and usage analytics
 
-### 📋 Next Steps for Production
+#### 🏥 Healthcare Considerations:
+- **HIPAA compliance**: Configure for healthcare environments
+- **Data retention**: Control call recording and storage
+- **Privacy controls**: Ensure patient data protection
+- **Audit logging**: Track call activities for compliance
+
+### 12. Advanced Features
+
+#### 🛠️ Call Management:
+```javascript
+// Advanced call features available
+const callFeatures = {
+  // Audio features
+  audioLevelMonitoring: true,
+  noiseSuppression: true,
+  echoCancellation: true,
+  autoGainControl: true,
+  
+  // Video features  
+  beautificationFilters: false,    // Can be enabled
+  virtualBackgrounds: false,       // Premium feature
+  screenSharing: false,           // Can be implemented
+  
+  // Analytics
+  networkQualityReporting: true,
+  callQualityStats: true,
+  connectionStateTracking: true
+};
+```
+
+#### 📊 Real-time Monitoring:
+- **Connection quality indicators**: Visual network status
+- **Audio/video quality metrics**: Real-time performance stats
+- **User presence detection**: Know when participants join/leave
+- **Error tracking**: Comprehensive error reporting and recovery
+
+### 13. API Integration
+
+#### 🔗 Key Service Methods:
+
+**Voice Call Management:**
+```javascript
+// Start a voice call
+await workingVoiceCallService.startVoiceCall(channelName, userId);
+
+// Manage audio
+await workingVoiceCallService.enableMicrophone();
+await workingVoiceCallService.setMicrophoneMuted(true/false);
+
+// End call
+await workingVoiceCallService.endVoiceCall();
+```
+
+**Video Call Management:**
+```javascript
+// Enable video during call
+await workingVoiceCallService.enableVideo();
+
+// Get video tracks for UI
+const localVideo = workingVoiceCallService.getLocalVideoTrack();
+const remoteVideo = workingVoiceCallService.getRemoteVideoTrack();
+
+// Camera controls
+await workingVoiceCallService.switchCamera();
+await workingVoiceCallService.disableVideo();
+```
+
+**Event Handling:**
+```javascript
+// Set up event callbacks
+workingVoiceCallService.onUserJoined = (user) => { /* handle */ };
+workingVoiceCallService.onRemoteVideoAvailable = (videoTrack) => { /* handle */ };
+workingVoiceCallService.onError = (error) => { /* handle */ };
+```
+
+### 14. 🔧 Advanced Configuration
+
+#### Agora Client Settings:
+```javascript
+// config/agoraConfigWeb.js example
+export const AGORA_CONFIG = {
+  APP_ID: 'YOUR_AGORA_APP_ID_HERE',
+  
+  CLIENT_CONFIG: {
+    mode: 'rtc',        // Real-time communication
+    codec: 'vp8'        // Video codec (vp8/h264)
+  },
+  
+  AUDIO_PROFILE: {
+    encoderConfig: 'music_standard',
+    microphoneId: undefined
+  },
+  
+  VIDEO_PROFILE: {
+    encoderConfig: '480p_1',
+    optimizationMode: 'motion',
+    facingMode: 'user'
+  }
+};
+```
+
+#### Video Container Styling:
+```css
+/* Responsive video containers */
+.video-container {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  gap: 10px;
+}
+
+.local-video, .remote-video {
+  flex: 1;
+  height: 180px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.local-video video, .remote-video video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+```
+
+### 15. 📋 Next Steps for Production
+
+#### 🚀 Essential Production Setup:
 1. **Set up Agora token server** for security
-2. **Enable HTTPS** on your web server
-3. **Add video calling capability** 
-4. **Implement call recording features**
-5. **Add call history/logging**
-6. **Optimize for mobile web browsers**
+   ```javascript
+   // Token-based authentication
+   const token = await generateAgoraToken(channelName, userId);
+   await client.join(APP_ID, channelName, token, userId);
+   ```
 
-### 🔧 Troubleshooting
-1. **No voice call button**: Ensure chat is connected and you have an agent assigned
-2. **Microphone permission denied**: Check browser settings and allow microphone access
-3. **Can't hear audio**: Check volume settings and audio output device
-4. **Connection issues**: Verify your Agora App ID is correct and HTTPS is enabled
-5. **Browser compatibility**: Use a modern browser (Chrome recommended)
+2. **Enable HTTPS** on your web server (required for camera/mic access)
 
-### ⚠️ Important Notes
+3. **Configure video quality** based on your bandwidth requirements
+
+4. **Implement call recording** features for healthcare compliance
+   ```javascript
+   // Start recording
+   await agoraRecordingService.startRecording(channelName);
+   ```
+
+5. **Add call history/logging** for audit trails
+
+6. **Optimize for mobile** web browsers
+
+#### 🏥 Healthcare-Specific Features:
+1. **HIPAA compliance** configuration
+2. **Patient data encryption** 
+3. **Call audit logging**
+4. **Secure token generation**
+5. **Data retention policies**
+
+#### � Analytics & Monitoring:
+1. **Call quality metrics** dashboard
+2. **Usage analytics** and billing
+3. **Error tracking** and debugging
+4. **Performance monitoring**
+
+### 16. �🔧 Troubleshooting
+
+#### 🎤 Audio Issues:
+| Problem | Solution |
+|---------|----------|
+| No voice call button | Ensure chat is connected and agent assigned |
+| Microphone permission denied | Check browser settings, allow mic access |
+| Can't hear audio | Check volume settings and audio output device |
+| Echo or feedback | Use headphones or enable echo cancellation |
+
+#### 📹 Video Issues:
+| Problem | Solution |
+|---------|----------|
+| Camera permission denied | Allow camera access in browser settings |
+| Video not showing | Check camera device selection and permissions |
+| Poor video quality | Adjust video quality settings or check bandwidth |
+| Video container sizing | Verify CSS styling and responsive design |
+| Camera switching fails | Ensure multiple cameras available on device |
+
+#### 🌐 Connection Issues:
+| Problem | Solution |
+|---------|----------|
+| Connection failed | Verify Agora App ID is correct |
+| HTTPS errors | Enable HTTPS for production deployment |
+| Network quality poor | Check internet connection and bandwidth |
+| Call dropping | Implement network quality monitoring |
+
+#### 🛠️ Development Issues:
+| Problem | Solution |
+|---------|----------|
+| Agora SDK not loading | Check SDK installation and imports |
+| Console errors | Enable debug logging and check error messages |
+| Browser compatibility | Use supported browser versions |
+| Permission handling | Implement proper permission request flow |
+
+### 17. ⚠️ Important Notes
+
+#### 🔑 Security Requirements:
 - **Replace the App ID** in `config/agoraConfigWeb.js` before testing
-- **HTTPS is required** for microphone access in production
-- **Both users need to be in the same chat** for voice calls to work
-- **Microphone permissions** are required and will be requested automatically
-- **Web-only implementation** - no mobile app dependencies
+- **HTTPS is required** for microphone and camera access in production
+- **Token authentication** recommended for production (currently using null tokens)
+- **Channel encryption** should be enabled for sensitive communications
 
-## 🎨 Customization
-The voice call interface can be customized by modifying:
-- `VoiceCallModal.css` - Visual styling and animations
-- `VoiceCallWebModal.js` - Functionality and behavior
-- `agoraWebVoiceService.js` - Audio settings and service configuration
+#### 👥 User Requirements:
+- **Both users need to be in the same chat** for voice/video calls to work
+- **Microphone permissions** are required and will be requested automatically
+- **Camera permissions** needed only when enabling video features
+- **Modern browser** required (Chrome recommended for best experience)
+
+#### 🌐 Implementation Notes:
+- **Web-only implementation** - no mobile app dependencies
+- **Responsive design** works on desktop and mobile browsers
+- **Real-time optimization** for live conversation scenarios
+- **Fallback handling** for older browsers and limited devices
+
+### 18. 🎨 Customization Options
+
+#### 🎨 UI Customization:
+The voice & video call interface can be customized by modifying:
+
+```javascript
+// Component styling
+WorkingVoiceCallModal.js - Main UI component structure
+// Add custom themes, colors, layouts
+
+// Service configuration  
+workingVoiceCallService.js - Audio/video settings and behavior
+// Modify quality settings, error handling, features
+
+// CSS styling
+// Custom styles for video containers, buttons, animations
+.videoContainer { /* Custom video layout */ }
+.controlButton { /* Custom control styling */ }
+```
+
+#### ⚙️ Feature Customization:
+```javascript
+// Customize call features
+const callConfig = {
+  // Audio options
+  enableNoiseSuppression: true,
+  enableEchoCancellation: true,
+  enableAutoGainControl: true,
+  
+  // Video options
+  defaultVideoQuality: '480p',
+  enableBeautification: false,
+  enableVirtualBackground: false,
+  
+  // UI options
+  showCallDuration: true,
+  showConnectionQuality: true,
+  enableCameraSwitching: true
+};
+```
+
+#### 🎵 Audio/Video Quality Settings:
+```javascript
+// Audio quality presets
+const audioProfiles = {
+  voice: { encoderConfig: 'speech_low_quality' },
+  music: { encoderConfig: 'music_standard' },
+  hifi: { encoderConfig: 'music_high_quality' }
+};
+
+// Video quality presets  
+const videoProfiles = {
+  low: { encoderConfig: '240p' },
+  medium: { encoderConfig: '480p' },
+  high: { encoderConfig: '720p' },
+  ultra: { encoderConfig: '1080p' }
+};
+```
+
+---
+
+## 🚀 Quick Start Checklist
+
+### ✅ Pre-Development:
+- [ ] Agora account created at [console.agora.io](https://console.agora.io/)
+- [ ] App ID obtained and voice/video features enabled
+- [ ] HTTPS setup for production (required for camera/mic access)
+
+### ✅ Development Setup:
+- [ ] Update `config/agoraConfigWeb.js` with your App ID
+- [ ] Test voice calling in two browser tabs
+- [ ] Test video calling with camera permissions
+- [ ] Verify all controls work (mute, video toggle, camera switch)
+
+### ✅ Production Ready:
+- [ ] Token-based authentication implemented
+- [ ] HTTPS enabled on web server
+- [ ] Error handling and user feedback implemented
+- [ ] Call quality monitoring added
+- [ ] Cross-browser testing completed
+
+---
+
+## 📞 Support & Resources
+
+- **Agora Documentation**: [docs.agora.io](https://docs.agora.io/)
+- **Web SDK Reference**: [docs.agora.io/web](https://docs.agora.io/web)
+- **Community Support**: [stackoverflow.com/questions/tagged/agora](https://stackoverflow.com/questions/tagged/agora)
+- **GitHub Issues**: Report implementation-specific issues in your project repository
+
+---
+
+**🎉 You now have a complete voice and video calling solution using Agora Web SDK with modern web technologies!**

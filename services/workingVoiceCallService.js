@@ -20,6 +20,11 @@ class WorkingVoiceCallService {
         this.onLocalVideoAvailable = null;
     }
 
+    // Get the Agora client instance for audio translation
+    getAgoraClient() {
+        return this.client;
+    }
+
     // Start a voice call using the working approach
     async startVoiceCall(channelName, userId = null) {
         try {

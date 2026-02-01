@@ -15,10 +15,7 @@ class SpeechToTextAPI {
         this.onStartCallback = null;
         this.onEndCallback = null;
         
-        // Add unique identifier for debugging
-        this.instanceId = Math.random().toString(36).substr(2, 9);
-        
-        console.log(`🎤 Speech-to-Text API initialized (ID: ${this.instanceId})`);
+        console.log('🎤 Speech-to-Text API initialized');
     }
 
     // Initialize speech recognition
@@ -85,14 +82,7 @@ class SpeechToTextAPI {
         };
 
         this.recognition.onerror = (event) => {
-            console.error(`🚨 [${this.instanceId}] Speech recognition error:`, event.error);
-            
-            // Handle aborted error specifically - don't log as error if we're restarting
-            if (event.error === 'aborted' && this.shouldContinue && !this.isStopping) {
-                console.log(`⚠️ [${this.instanceId}] Speech recognition aborted during restart - this is normal`);
-                return;
-            }
-            
+            console.error('🚨 Speech recognition error:', event.error);
             this.handleSpeechError(event);
         };
 
@@ -112,18 +102,12 @@ class SpeechToTextAPI {
                             this.recognition.start();
                         } catch (error) {
                             console.warn('⚠️ Restart failed, trying again...', error.message);
-                            // If restart fails, try again after a longer delay
                             setTimeout(() => {
                                 if (this.shouldContinue && !this.isStopping) {
-                                    try {
-                                        this.isRecording = true;
-                                        this.recognition.start();
-                                    } catch (retryError) {
-                                        console.error('❌ Failed to restart speech recognition after retry:', retryError.message);
-                                        this.shouldContinue = false; // Stop trying to restart
-                                    }
+                                    this.isRecording = true;
+                                    this.recognition.start();
                                 }
-                            }, 1000); // Wait 1 second before retry
+                            }, 500);
                         }
                     }
                 }, 100);
@@ -178,12 +162,7 @@ class SpeechToTextAPI {
             error.message = 'No speech detected. Please speak clearly.';
         } else if (event.error === 'network') {
             error.message = 'Network error occurred during speech recognition.';
-        } else if (event.error === 'aborted') {
-            error.message = 'Speech recognition was aborted. This can happen if multiple recognition sessions overlap.';
-            console.log('🔄 Aborted error - will attempt restart if needed');
         }
-
-        console.error(`❌ Speech Error: ${error.message}`);
 
         if (this.onErrorCallback) {
             this.onErrorCallback(error);
@@ -193,25 +172,19 @@ class SpeechToTextAPI {
     // Start speech recognition
     async startRecognition(language = 'en-US') {
         try {
-            console.log(`🎤 [${this.instanceId}] Starting speech recognition for: ${language}`);
-            
             if (!this.recognition) {
                 await this.initialize({ language });
             }
 
             if (this.isRecording) {
-                console.log(`⚠️ [${this.instanceId}] Already recording - stopping current session first`);
-                await this.stopRecognition();
-                await new Promise(resolve => setTimeout(resolve, 200)); // Wait a bit
+                return { success: false, error: 'Already recording' };
             }
 
             // Request microphone permission first
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 stream.getTracks().forEach(track => track.stop()); // Stop the stream immediately, we just needed permission
-                console.log(`✅ [${this.instanceId}] Microphone permission granted`);
             } catch (permissionError) {
-                console.error(`❌ [${this.instanceId}] Microphone permission denied:`, permissionError);
                 return { success: false, error: 'Microphone permission denied. Please allow microphone access.' };
             }
 
@@ -222,18 +195,7 @@ class SpeechToTextAPI {
 
             this.shouldContinue = true;
             this.isStopping = false;
-            
-            // Add a small random delay to prevent conflicts between multiple instances
-            const delay = Math.random() * 300; // 0-300ms random delay
-            setTimeout(() => {
-                try {
-                    console.log(`🚀 [${this.instanceId}] Starting speech recognition...`);
-                    this.recognition.start();
-                } catch (startError) {
-                    console.error(`❌ [${this.instanceId}] Failed to start recognition:`, startError.message);
-                    return { success: false, error: startError.message };
-                }
-            }, delay);
+            this.recognition.start();
             
             return { success: true };
             

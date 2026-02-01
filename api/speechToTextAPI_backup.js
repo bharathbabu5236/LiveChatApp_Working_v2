@@ -1,7 +1,19 @@
 // Custom Speech-to-Text API Service
-// Handles real-time speech recognition for live translation
-
-class SpeechToTextAPI {
+// Handles real-time speech recognition for live tra        this.recognition.onend = () => {
+            this.isRecording = false;
+            
+            if (this.onEndCallback) {
+                this.onEndCallback();
+            }
+            
+            // Auto-restart for continuous recognition
+            if (this.shouldContinue && !this.isStopping) {
+                setTimeout(() => {
+                    if (this.shouldContinue && !this.isStopping) {
+                        try {
+                            this.isRecording = true;
+                            this.recognition.start();
+                        } catch (error) {SpeechToTextAPI {
     constructor() {
         this.isRecording = false;
         this.shouldContinue = false;
@@ -15,10 +27,7 @@ class SpeechToTextAPI {
         this.onStartCallback = null;
         this.onEndCallback = null;
         
-        // Add unique identifier for debugging
-        this.instanceId = Math.random().toString(36).substr(2, 9);
-        
-        console.log(`🎤 Speech-to-Text API initialized (ID: ${this.instanceId})`);
+        console.log('🎤 Speech-to-Text API initialized');
     }
 
     // Initialize speech recognition
@@ -54,7 +63,7 @@ class SpeechToTextAPI {
         if (typeof window === 'undefined') {
             return false;
         }
-
+        
         return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
     }
 
@@ -63,17 +72,18 @@ class SpeechToTextAPI {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         
         if (!SpeechRecognition) {
-            throw new Error('Web Speech API not supported');
+            throw new Error('Web Speech API not available');
         }
 
         this.recognition = new SpeechRecognition();
-        this.recognition.lang = config.language;
         this.recognition.continuous = config.continuous;
         this.recognition.interimResults = config.interimResults;
+        this.recognition.lang = config.language;
         this.recognition.maxAlternatives = config.maxAlternatives;
 
-        // Set up event handlers
+        // Set up event listeners
         this.recognition.onstart = () => {
+            console.log('🎤 Speech recognition started');
             this.isRecording = true;
             if (this.onStartCallback) {
                 this.onStartCallback();
@@ -85,18 +95,12 @@ class SpeechToTextAPI {
         };
 
         this.recognition.onerror = (event) => {
-            console.error(`🚨 [${this.instanceId}] Speech recognition error:`, event.error);
-            
-            // Handle aborted error specifically - don't log as error if we're restarting
-            if (event.error === 'aborted' && this.shouldContinue && !this.isStopping) {
-                console.log(`⚠️ [${this.instanceId}] Speech recognition aborted during restart - this is normal`);
-                return;
-            }
-            
+            console.error('🚨 Speech recognition error:', event.error);
             this.handleSpeechError(event);
         };
 
         this.recognition.onend = () => {
+            console.log('� Speech recognition ended, restarting...');
             this.isRecording = false;
             
             if (this.onEndCallback) {
@@ -112,18 +116,12 @@ class SpeechToTextAPI {
                             this.recognition.start();
                         } catch (error) {
                             console.warn('⚠️ Restart failed, trying again...', error.message);
-                            // If restart fails, try again after a longer delay
                             setTimeout(() => {
                                 if (this.shouldContinue && !this.isStopping) {
-                                    try {
-                                        this.isRecording = true;
-                                        this.recognition.start();
-                                    } catch (retryError) {
-                                        console.error('❌ Failed to restart speech recognition after retry:', retryError.message);
-                                        this.shouldContinue = false; // Stop trying to restart
-                                    }
+                                    this.isRecording = true;
+                                    this.recognition.start();
                                 }
-                            }, 1000); // Wait 1 second before retry
+                            }, 500);
                         }
                     }
                 }, 100);
@@ -158,60 +156,51 @@ class SpeechToTextAPI {
                     this.onResultCallback(result);
                 }
             }
-            
         } catch (error) {
-            console.error('❌ Error handling speech result:', error);
+            console.error('Error handling speech result:', error);
         }
     }
 
     // Handle speech recognition errors
     handleSpeechError(event) {
-        const error = {
-            error: event.error,
-            message: event.message || `Speech recognition error: ${event.error}`,
-            timestamp: new Date().toISOString()
+        const errorMessages = {
+            'aborted': 'Speech recognition was aborted',
+            'audio-capture': 'Audio capture failed',
+            'network': 'Network error occurred',
+            'not-allowed': 'Microphone permission was denied',
+            'service-not-allowed': 'Speech service not allowed',
+            'bad-grammar': 'Grammar compilation failed',
+            'language-not-supported': 'Language not supported',
+            'no-speech': 'No speech was detected'
         };
 
-        if (event.error === 'not-allowed') {
-            error.message = 'Microphone access not allowed. Please grant permission and try again.';
-        } else if (event.error === 'no-speech') {
-            error.message = 'No speech detected. Please speak clearly.';
-        } else if (event.error === 'network') {
-            error.message = 'Network error occurred during speech recognition.';
-        } else if (event.error === 'aborted') {
-            error.message = 'Speech recognition was aborted. This can happen if multiple recognition sessions overlap.';
-            console.log('🔄 Aborted error - will attempt restart if needed');
-        }
-
-        console.error(`❌ Speech Error: ${error.message}`);
-
+        const errorMessage = errorMessages[event.error] || `Unknown error: ${event.error}`;
+        
         if (this.onErrorCallback) {
-            this.onErrorCallback(error);
+            this.onErrorCallback({
+                type: event.error,
+                message: errorMessage,
+                timestamp: new Date().toISOString()
+            });
         }
     }
 
     // Start speech recognition
     async startRecognition(language = 'en-US') {
         try {
-            console.log(`🎤 [${this.instanceId}] Starting speech recognition for: ${language}`);
-            
             if (!this.recognition) {
                 await this.initialize({ language });
             }
 
             if (this.isRecording) {
-                console.log(`⚠️ [${this.instanceId}] Already recording - stopping current session first`);
-                await this.stopRecognition();
-                await new Promise(resolve => setTimeout(resolve, 200)); // Wait a bit
+                return { success: false, error: 'Already recording' };
             }
 
             // Request microphone permission first
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 stream.getTracks().forEach(track => track.stop()); // Stop the stream immediately, we just needed permission
-                console.log(`✅ [${this.instanceId}] Microphone permission granted`);
             } catch (permissionError) {
-                console.error(`❌ [${this.instanceId}] Microphone permission denied:`, permissionError);
                 return { success: false, error: 'Microphone permission denied. Please allow microphone access.' };
             }
 
@@ -222,18 +211,7 @@ class SpeechToTextAPI {
 
             this.shouldContinue = true;
             this.isStopping = false;
-            
-            // Add a small random delay to prevent conflicts between multiple instances
-            const delay = Math.random() * 300; // 0-300ms random delay
-            setTimeout(() => {
-                try {
-                    console.log(`🚀 [${this.instanceId}] Starting speech recognition...`);
-                    this.recognition.start();
-                } catch (startError) {
-                    console.error(`❌ [${this.instanceId}] Failed to start recognition:`, startError.message);
-                    return { success: false, error: startError.message };
-                }
-            }, delay);
+            this.recognition.start();
             
             return { success: true };
             
@@ -267,29 +245,22 @@ class SpeechToTextAPI {
         }
     }
 
-    // Update language
-    updateLanguage(language) {
-        if (this.recognition && this.recognition.lang !== language) {
-            this.recognition.lang = language;
-            
-            // Restart recognition with new language if currently active
-            if (this.isRecording) {
-                this.recognition.stop(); // This will trigger restart with new language
+    // Set language for recognition
+    setLanguage(language) {
+        try {
+            if (this.recognition) {
+                this.recognition.lang = language;
+                console.log(`🌍 Speech recognition language set to: ${language}`);
+                return { success: true };
+            } else {
+                return { success: false, error: 'Recognition not initialized' };
             }
+        } catch (error) {
+            return { success: false, error: error.message };
         }
     }
 
-    // Check if currently recording
-    isActive() {
-        return this.isRecording;
-    }
-
-    // Get current language
-    getCurrentLanguage() {
-        return this.recognition ? this.recognition.lang : null;
-    }
-
-    // Get supported languages (basic list)
+    // Get supported languages
     getSupportedLanguages() {
         return {
             'en-US': 'English (US)',
@@ -303,11 +274,44 @@ class SpeechToTextAPI {
             'ru-RU': 'Russian',
             'ja-JP': 'Japanese',
             'ko-KR': 'Korean',
-            'zh-CN': 'Chinese (Simplified)',
+            'zh-CN': 'Chinese (Mandarin)',
             'ar-SA': 'Arabic',
             'hi-IN': 'Hindi',
             'tr-TR': 'Turkish',
-            'nl-NL': 'Dutch'
+            'nl-NL': 'Dutch',
+            'sv-SE': 'Swedish',
+            'da-DK': 'Danish',
+            'no-NO': 'Norwegian',
+            'fi-FI': 'Finnish',
+            'pl-PL': 'Polish',
+            'cs-CZ': 'Czech',
+            'hu-HU': 'Hungarian',
+            'ro-RO': 'Romanian',
+            'bg-BG': 'Bulgarian',
+            'hr-HR': 'Croatian',
+            'sk-SK': 'Slovak',
+            'sl-SI': 'Slovenian',
+            'et-EE': 'Estonian',
+            'lv-LV': 'Latvian',
+            'lt-LT': 'Lithuanian',
+            'mt-MT': 'Maltese',
+            'el-GR': 'Greek',
+            'he-IL': 'Hebrew',
+            'th-TH': 'Thai',
+            'vi-VN': 'Vietnamese',
+            'id-ID': 'Indonesian',
+            'ms-MY': 'Malay',
+            'fil-PH': 'Filipino'
+        };
+    }
+
+    // Get current status
+    getStatus() {
+        return {
+            isRecording: this.isRecording,
+            isSupported: this.isBrowserSupported(),
+            currentLanguage: this.recognition?.lang || null,
+            isInitialized: !!this.recognition
         };
     }
 
@@ -328,21 +332,38 @@ class SpeechToTextAPI {
         this.onEndCallback = callback;
     }
 
-    // Get current status
-    getStatus() {
-        return {
-            isRecording: this.isRecording,
-            shouldContinue: this.shouldContinue,
-            isStopping: this.isStopping,
-            language: this.getCurrentLanguage(),
-            isSupported: this.isBrowserSupported()
-        };
+    // Test the API
+    async testAPI() {
+        try {
+            console.log('🧪 Testing Speech-to-Text API...');
+            
+            const status = this.getStatus();
+            console.log('Status:', status);
+            
+            if (!status.isSupported) {
+                throw new Error('Speech recognition not supported');
+            }
+
+            const initResult = await this.initialize();
+            if (!initResult.success) {
+                throw new Error(initResult.error);
+            }
+
+            console.log('✅ Speech-to-Text API test passed');
+            return { success: true, status };
+            
+        } catch (error) {
+            console.error('❌ Speech-to-Text API test failed:', error);
+            return { success: false, error: error.message };
+        }
     }
 
-    // Cleanup resources
-    async cleanup() {
+    // Cleanup
+    destroy() {
         try {
-            await this.stopRecognition();
+            if (this.isRecording) {
+                this.stopRecognition();
+            }
             
             this.recognition = null;
             this.onResultCallback = null;
@@ -350,8 +371,10 @@ class SpeechToTextAPI {
             this.onStartCallback = null;
             this.onEndCallback = null;
             
+            console.log('🧹 Speech-to-Text API cleanup completed');
+            
         } catch (error) {
-            console.error('❌ Cleanup failed:', error);
+            console.error('Error during cleanup:', error);
         }
     }
 }

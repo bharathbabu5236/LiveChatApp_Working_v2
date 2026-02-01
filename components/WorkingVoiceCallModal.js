@@ -409,14 +409,14 @@ const WorkingVoiceCallModal = ({
                     targetUserLanguage
                 );
                 
-                if (!initResult.success) {
-                    throw new Error(initResult.error);
-                }
+                console.log('🎯 Initialize result:', initResult);
 
                 // Start audio translation
                 const startResult = await agoraAudioTranslationService.startAudioTranslation();
                 
-                if (startResult.success) {
+                console.log('🎯 Start result:', startResult);
+                
+                if (startResult) {
                     setIsTranslationActive(true);
                     console.log('✅ Agora Audio Translation started successfully');
                     
@@ -426,7 +426,7 @@ const WorkingVoiceCallModal = ({
                         [{ text: 'Great!' }]
                     );
                 } else {
-                    throw new Error(startResult.error);
+                    throw new Error('Failed to start audio translation');
                 }
             } else {
                 // Stop audio translation

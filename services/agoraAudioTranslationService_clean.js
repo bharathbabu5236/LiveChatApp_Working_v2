@@ -8,6 +8,10 @@ import { getApiKey } from '../config/translationApiConfig';
 
 class AgoraAudioTranslationService {
     constructor() {
+        console.log('\n🔥🔥🔥 AGORA AUDIO TRANSLATION SERVICE CONSTRUCTOR 🔥🔥🔥');
+        console.log('🎯 This message should appear in BOTH sender and receiver console');
+        console.log('📅 Timestamp:', new Date().toISOString());
+        
         this.isActive = false;
         this.agoraClient = null;
         this.originalAudioTrack = null;
@@ -29,15 +33,21 @@ class AgoraAudioTranslationService {
         const apiKey = getApiKey('google-translate');
         if (apiKey) {
             textTranslationAPI.setApiKey(apiKey);
+            console.log('🔑 Agora Translation: API key configured');
         }
         
         console.log('🎵 Agora Audio Translation Service initialized');
+        console.log('🔥🔥🔥 CONSTRUCTOR COMPLETE 🔥🔥🔥\n');
     }
 
     // Initialize the service with Agora client and user languages
     async initialize(agoraClient, userLanguage = 'en', partnerLanguage = 'hi') {
         try {
-            console.log('🚀 Agora Translation: EN → HI audio translation ready');
+            console.log('\n🚀 === AGORA AUDIO TRANSLATION INITIALIZATION ===');
+            console.log('📋 Initialization Parameters:');
+            console.log(`   User Language: ${userLanguage}`);
+            console.log(`   Partner Language: ${partnerLanguage}`);
+            console.log(`   Agora Client: ${agoraClient ? 'Available' : 'NULL'}`);
             
             this.agoraClient = agoraClient;
             this.userLanguage = userLanguage;
@@ -46,6 +56,9 @@ class AgoraAudioTranslationService {
             // Initialize Web Audio API
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             this.mediaDestination = this.audioContext.createMediaStreamDestination();
+            
+            console.log('✅ Agora Audio Translation Service initialized successfully');
+            console.log(`🎯 Translation Route: ${userLanguage.toUpperCase()} → ${partnerLanguage.toUpperCase()}`);
             
             return true;
         } catch (error) {
@@ -57,7 +70,8 @@ class AgoraAudioTranslationService {
     // Enable translation mode - start capturing and translating user's audio
     async enableTranslation() {
         try {
-            console.log('🎤 Starting audio translation...');
+            console.log('\n🔥🔥🔥 ENABLING TRANSLATION MODE 🔥🔥🔥');
+            console.log('🎤 Starting speech recognition for real-time translation...');
             
             if (!this.agoraClient) {
                 throw new Error('Agora client not initialized');
@@ -67,6 +81,9 @@ class AgoraAudioTranslationService {
 
             // Start speech recognition
             await this.setupOutgoingAudioTranslation();
+            
+            console.log('✅ Translation mode enabled successfully');
+            console.log('🎯 Now listening for speech to translate and transmit via Agora');
             
             return true;
         } catch (error) {
@@ -119,13 +136,21 @@ class AgoraAudioTranslationService {
             }
 
             // Start speech recognition with translation callback
-            speechToTextAPI.onResult(async (result) => {
-                if (result.isFinal && result.transcript.trim().length > 0) {
-                    await this.translateAndSendAudio(result.transcript, this.userLanguage, this.partnerLanguage);
+            await speechToTextAPI.startRecognition(
+                this.userLanguage,
+                async (result) => {
+                    console.log('\n🗣️ === SPEECH RECOGNITION RESULT ===');
+                    console.log('🎯 THIS MESSAGE SHOULD APPEAR IN BOTH CONSOLES');
+                    console.log(`📝 Recognized Text: "${result.transcript}"`);
+                    console.log(`✅ Is Final: ${result.isFinal}`);
+                    console.log(`📊 Confidence: ${result.confidence || 'N/A'}`);
+                    
+                    if (result.isFinal && result.transcript.trim().length > 0) {
+                        console.log('🔥 PROCESSING FINAL TRANSCRIPT FOR TRANSLATION');
+                        await this.translateAndSendAudio(result.transcript, this.userLanguage, this.partnerLanguage);
+                    }
                 }
-            });
-            
-            await speechToTextAPI.startRecognition(this.userLanguage);
+            );
             
             console.log('✅ Outgoing audio translation setup complete');
             
@@ -138,8 +163,16 @@ class AgoraAudioTranslationService {
     // Translate text and send as audio
     async translateAndSendAudio(text, sourceLanguage, targetLanguage) {
         try {
-            console.log(`🔄 TRANSLATING: "${text}" (${sourceLanguage} → ${targetLanguage})`);
+            console.log('\n=== FIRE FIRE FIRE TRANSLATE AND SEND AUDIO CALLED ===');
+            console.log('THIS MESSAGE SHOULD APPEAR IN BOTH CONSOLES');
+            console.log(`\n=== TRANSLATION STEP-BY-STEP ===`);
+            console.log(`📝 Original Text: "${text}"`);
+            console.log(`📝 From: ${sourceLanguage.toUpperCase()}`);
+            console.log(`📝 To: ${targetLanguage.toUpperCase()}`);
+            console.log('VISIBLE TO BOTH SENDER AND RECEIVER');
             
+            // Step 1: Translate the text
+            console.log(`Step 1: Calling Google Translate API...`);
             const translationResult = await textTranslationAPI.translateText(
                 text, 
                 sourceLanguage, 
@@ -152,16 +185,24 @@ class AgoraAudioTranslationService {
             }
             
             const translatedText = translationResult.translatedText;
-            console.log(`✅ TRANSLATED: "${translatedText}"`);
+            console.log(`✅ Step 1 Complete - Translated Text: "${translatedText}"`);
             
-            // Generate audio from translated text
+            // Step 2: Generate audio from translated text
+            console.log(`Step 2: Converting translated text to audio...`);
             const audioBuffer = await this.generateAudioFromText(translatedText, targetLanguage);
+            console.log(`✅ Step 2 Complete - Audio buffer generated`);
             
-            // Create custom audio track and replace current track
+            // Step 3: Create custom audio track and replace current track
+            console.log(`Step 3: Creating custom Agora audio track...`);
             await this.replaceAudioTrackWithTranslation(audioBuffer);
+            console.log(`✅ Step 3 Complete - Audio track replaced`);
+            
+            console.log('🎉 TRANSLATION AND AUDIO TRANSMISSION COMPLETE');
+            console.log('🔥🔥🔥 BOTH SENDER AND RECEIVER SHOULD SEE THIS 🔥🔥🔥\n');
             
         } catch (error) {
-            console.error('❌ Translation failed:', error.message);
+            console.error('❌ Translation and audio sending failed:', error);
+            console.error('🔥 ERROR DETAILS:', error.message);
         }
     }
 
@@ -249,11 +290,6 @@ class AgoraAudioTranslationService {
         }
     }
 
-    // Update language preferences (alias for backward compatibility)
-    setUserLanguages(userLanguage, partnerLanguage) {
-        return this.updateLanguagePreferences(userLanguage, partnerLanguage);
-    }
-
     // Update language preferences
     updateLanguagePreferences(userLanguage, partnerLanguage) {
         console.log(`🔄 Updating language preferences:`);
@@ -267,16 +303,6 @@ class AgoraAudioTranslationService {
         if (this.isTranslationModeActive) {
             speechToTextAPI.updateLanguage(userLanguage);
         }
-    }
-
-    // Start audio translation (alias for enableTranslation)
-    async startAudioTranslation() {
-        return await this.enableTranslation();
-    }
-
-    // Stop audio translation (alias for disableTranslation)
-    async stopAudioTranslation() {
-        return await this.disableTranslation();
     }
 
     // Get current status

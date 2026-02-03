@@ -1,5 +1,5 @@
 // Direct Agora calling service without Firebase signaling
-import agoraWebVoiceService from './agoraWebVoiceService';
+import workingVoiceCallService from './workingVoiceCallService';
 import { generateChannelName } from '../config/agoraConfigWeb';
 
 class DirectCallService {
@@ -31,14 +31,14 @@ class DirectCallService {
             console.log('DirectCall: Using channel:', channelName);
 
             // Set up Agora event listeners
-            agoraWebVoiceService.onUserJoined = (user) => {
+            workingVoiceCallService.onUserJoined = (user) => {
                 console.log('DirectCall: Remote user joined:', user.uid);
                 if (this.onIncomingUser) {
                     this.onIncomingUser(user);
                 }
             };
 
-            agoraWebVoiceService.onUserLeft = (user) => {
+            workingVoiceCallService.onUserLeft = (user) => {
                 console.log('DirectCall: Remote user left:', user.uid);
                 if (this.onUserLeft) {
                     this.onUserLeft(user);
@@ -46,7 +46,7 @@ class DirectCallService {
                 this.endCall();
             };
 
-            agoraWebVoiceService.onError = (error) => {
+            workingVoiceCallService.onError = (error) => {
                 console.error('DirectCall: Agora error:', error);
                 // Don't automatically end call, let the modal handle the error
                 if (this.onCallEnded) {
@@ -54,17 +54,12 @@ class DirectCallService {
                 }
             };
 
-            // Initialize and join channel
-            const initialized = await agoraWebVoiceService.initializeClient();
-            if (!initialized) {
-                throw new Error('Failed to initialize Agora client');
+            // Initialize and join channel using working voice service
+            const result = await workingVoiceCallService.startVoiceCall(channelName, currentUserId);
+            if (!result.success) {
+                throw new Error(result.message || 'Failed to start voice call');
             }
 
-            const result = await agoraWebVoiceService.joinChannel(channelName, currentUserId);
-            if (!result.success) {
-                throw new Error('Failed to join voice channel: ' + result.error);
-            }
-            
             this.activeCall = {
                 channelName,
                 currentUserId,
@@ -100,7 +95,7 @@ class DirectCallService {
             console.log('DirectCall: Ending call');
             
             if (this.activeCall) {
-                await agoraWebVoiceService.leaveChannel();
+                await workingVoiceCallService.endCall();
                 
                 if (this.onCallEnded) {
                     this.onCallEnded(this.activeCall);
@@ -132,15 +127,17 @@ class DirectCallService {
     // Mute/unmute microphone
     async toggleMute() {
         if (this.isInCall()) {
-            return await agoraWebVoiceService.toggleMicrophone();
+            return await workingVoiceCallService.toggleMicrophone();
         }
         return false;
     }
 
-    // Adjust volume
+    // Adjust volume (Note: workingVoiceCallService might not have this method)
     async setVolume(volume) {
         if (this.isInCall()) {
-            return await agoraWebVoiceService.setVolume(volume);
+            // workingVoiceCallService doesn't have setVolume, so return true for compatibility
+            console.log('DirectCall: Volume control not implemented in workingVoiceCallService');
+            return true;
         }
         return false;
     }

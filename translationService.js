@@ -1,7 +1,7 @@
 // LiveChatApp/translationService.js
 
 // Google Translate Configuration
-const GOOGLE_TRANSLATE_API_KEY = 'AIzaSyCJALQzXTUdWubtI2VnGzPZBk2Do20Ec28'; // Replace with your API key from JSON file
+const GOOGLE_TRANSLATE_API_KEY = 'AIzaSyC-KeQ39iD_HAwGVbQt830FP8EzEY7Ez5s'; // Replace with your API key from JSON file
 const GOOGLE_TRANSLATE_ENDPOINT = 'https://translation.googleapis.com/language/translate/v2';
 
 // Supported languages with their codes and display names (Google Translate supported languages)
@@ -111,17 +111,26 @@ export const SUPPORTED_LANGUAGES = {
 // Function to translate text using Google Translate
 export const translateText = async (text, targetLanguage, sourceLanguage = 'auto') => {
   try {
+    console.log('🌐 Google Translate API Call Started');
+    console.log('📝 Input Text:', text);
+    console.log('🗣️ Source Language:', sourceLanguage);
+    console.log('🎯 Target Language:', targetLanguage);
+    console.log('🔑 API Key:', GOOGLE_TRANSLATE_API_KEY ? `${GOOGLE_TRANSLATE_API_KEY.substring(0, 6)}...` : 'NOT SET');
+
     if (!text || text.trim() === '') {
+      console.log('⚠️ Empty text provided, returning as-is');
       return { translatedText: text, detectedLanguage: sourceLanguage };
     }
 
     // If source and target are the same, return original text
     if (sourceLanguage === targetLanguage) {
+      console.log('⚠️ Source and target languages are the same, returning original text');
       return { translatedText: text, detectedLanguage: sourceLanguage };
     }
 
     // Prepare the request URL
     const url = `${GOOGLE_TRANSLATE_ENDPOINT}?key=${GOOGLE_TRANSLATE_API_KEY}`;
+    console.log('🌐 Request URL:', `${GOOGLE_TRANSLATE_ENDPOINT}?key=***`);
 
     const requestBody = {
       q: text,
@@ -134,6 +143,8 @@ export const translateText = async (text, targetLanguage, sourceLanguage = 'auto
       requestBody.source = sourceLanguage;
     }
 
+    console.log('📦 Request Body:', JSON.stringify(requestBody, null, 2));
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -142,23 +153,59 @@ export const translateText = async (text, targetLanguage, sourceLanguage = 'auto
       body: JSON.stringify(requestBody)
     });
 
+    console.log('📡 Response Status:', response.status);
+    console.log('📡 Response Status Text:', response.statusText);
+
     if (!response.ok) {
-      throw new Error(`Google Translate API error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('❌ Google Translate API Error Response:', errorText);
+      
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        errorData = { error: { message: errorText } };
+      }
+      
+      // Handle specific error cases
+      if (response.status === 403) {
+        if (errorData.error && errorData.error.message.includes('Rate Limit Exceeded')) {
+          throw new Error('QUOTA_EXCEEDED: Google Translate API quota exceeded. Please check your Google Cloud billing and quota limits.');
+        } else if (errorData.error && errorData.error.message.includes('API key')) {
+          throw new Error('API_KEY_INVALID: Google Translate API key is invalid or not authorized for this service.');
+        } else {
+          throw new Error('PERMISSION_DENIED: Access denied to Google Translate API. Check your API key permissions.');
+        }
+      } else if (response.status === 400) {
+        throw new Error('BAD_REQUEST: Invalid request format or parameters.');
+      } else if (response.status === 429) {
+        throw new Error('RATE_LIMIT: Too many requests. Please wait and try again.');
+      }
+      
+      throw new Error(`Google Translate API error: ${response.status} ${response.statusText} - ${errorData.error?.message || errorText}`);
     }
 
     const data = await response.json();
+    console.log('📥 API Response Data:', JSON.stringify(data, null, 2));
     
     if (data && data.data && data.data.translations && data.data.translations[0]) {
-      return {
+      const result = {
         translatedText: data.data.translations[0].translatedText,
         detectedLanguage: data.data.translations[0].detectedSourceLanguage || sourceLanguage,
         confidence: 1.0, // Google Translate doesn't provide confidence scores in the same way
       };
+      console.log('✅ Translation Successful!');
+      console.log('📄 Translated Text:', result.translatedText);
+      console.log('🔍 Detected Language:', result.detectedLanguage);
+      return result;
     } else {
+      console.error('❌ Invalid API response structure:', data);
       throw new Error('Invalid response from Google Translate API');
     }
   } catch (error) {
-    console.error('Google Translate error:', error);
+    console.error('💥 Google Translate Error Details:', error);
+    console.error('💥 Error Message:', error.message);
+    console.error('💥 Error Stack:', error.stack);
     // Return original text if translation fails
     return {
       translatedText: text,

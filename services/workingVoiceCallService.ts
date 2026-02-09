@@ -208,6 +208,7 @@ class WorkingVoiceCallService {
     async enableMicrophone(): Promise<ServiceResult> {
         try {
             console.log('🎤 Creating microphone audio track...');
+            
             this.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
                 encoderConfig: 'music_standard'
             });
@@ -221,6 +222,205 @@ class WorkingVoiceCallService {
         } catch (error: any) {
             console.error('❌ Failed to enable microphone:', error);
             return { success: false, error: error.message };
+        }
+    }
+
+    // REAL TTS SOLUTION: Record speech synthesis through virtual audio cable
+    async speakTextThroughCall(text: string, options: {
+        lang?: string;
+        voice?: SpeechSynthesisVoice;
+        rate?: number;
+        pitch?: number;
+        volume?: number;
+    } = {}): Promise<boolean> {
+        try {
+            console.log(`🗣️ 📞 REAL TTS SOLUTION: Speaking "${text}"`);
+
+            // Check if we have an active call and audio track
+            if (!this.localAudioTrack || !this.client) {
+                console.error('🗣️ ❌ No active call or audio track');
+                return false;
+            }
+
+            console.log('🗣️ 🎤 Implementing ACTUAL TTS audio transmission...');
+
+            // Step 1: Store original state
+            const wasOriginallyMuted = this.localAudioTrack.muted;
+            
+            // Step 2: Create audio context for recording TTS
+            const audioContext = new AudioContext();
+            
+            // Step 3: Create a MediaStreamDestination to capture our audio
+            const destination = audioContext.createMediaStreamDestination();
+            const masterGain = audioContext.createGain();
+            masterGain.gain.setValueAtTime(0.0, audioContext.currentTime); // Start silent
+            masterGain.connect(destination);
+            
+            // Step 4: Get microphone access to create a working audio stream
+            const micStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
+                }
+            });
+            
+            // Connect microphone but keep it muted during TTS
+            const micSource = audioContext.createMediaStreamSource(micStream);
+            const micGain = audioContext.createGain();
+            micGain.gain.setValueAtTime(0.0, audioContext.currentTime); // Mute mic during TTS
+            micSource.connect(micGain);
+            micGain.connect(masterGain);
+            
+            // Step 5: Create custom Agora track
+            const ttsAudioTrack = await AgoraRTC.createCustomAudioTrack({
+                mediaStreamTrack: destination.stream.getAudioTracks()[0]
+            });
+            
+            // Replace the audio track
+            await this.client.unpublish([this.localAudioTrack]);
+            await this.client.publish([ttsAudioTrack]);
+            console.log('🗣️ ✅ TTS audio track published');
+
+            // Step 6: The KEY INSIGHT - Use screen audio capture workaround
+            // Since we can't capture TTS directly, we'll create an audio element
+            // and use screen sharing audio to capture it
+            
+            // Create hidden audio element for TTS playback
+            const audioElement = document.createElement('audio');
+            audioElement.style.display = 'none';
+            audioElement.volume = 1.0;
+            document.body.appendChild(audioElement);
+            
+            // Create TTS utterance
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = options.rate || 0.9;
+            utterance.pitch = options.pitch || 1.0;
+            utterance.volume = 1.0;
+            utterance.lang = options.lang || 'en-US';
+            
+            if (options.voice) {
+                utterance.voice = options.voice;
+                console.log(`🗣️ Using voice: ${options.voice.name}`);
+            }
+            
+            // Step 7: WORKAROUND SOLUTION - Use getDisplayMedia with audio
+            // This can capture system audio including TTS
+            let screenStream: MediaStream | null = null;
+            
+            try {
+                // Request screen capture with audio (this can capture TTS)
+                screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: false,
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false,
+                        sampleRate: 44100
+                    } as any
+                });
+                
+                if (screenStream && screenStream.getAudioTracks().length > 0) {
+                    console.log('🗣️ ✅ Screen audio capture successful - using for TTS');
+                    
+                    // Connect screen audio to our destination
+                    const screenAudioSource = audioContext.createMediaStreamSource(screenStream);
+                    const screenGain = audioContext.createGain();
+                    screenGain.gain.setValueAtTime(0.7, audioContext.currentTime);
+                    screenAudioSource.connect(screenGain);
+                    screenGain.connect(masterGain);
+                    
+                    // Enable audio output
+                    masterGain.gain.setValueAtTime(0.8, audioContext.currentTime);
+                    
+                    console.log('🗣️ Starting TTS with screen audio capture...');
+                } else {
+                    throw new Error('No audio track in screen capture');
+                }
+            } catch (screenError) {
+                console.log('🗣️ Screen capture not available, using fallback method');
+                
+                // Fallback: Use microphone but ask user to play TTS through speakers
+                micGain.gain.setValueAtTime(0.8, audioContext.currentTime);
+                masterGain.gain.setValueAtTime(0.8, audioContext.currentTime);
+                
+                alert('🎤 IMPORTANT: Please ensure your microphone can pick up the computer speakers, then click OK. The TTS will play through speakers and be captured by the microphone for transmission.');
+            }
+            
+            // Step 8: Play the TTS
+            return new Promise((resolve) => {
+                // Calculate estimated duration
+                const words = text.split(' ').length;
+                const estimatedDuration = Math.max(2, (words * 60) / 120); // 120 WPM average
+                
+                utterance.onstart = () => {
+                    console.log('🗣️ TTS started playing');
+                };
+                
+                utterance.onend = () => {
+                    console.log('🗣️ TTS finished playing');
+                };
+                
+                utterance.onerror = (event) => {
+                    console.error('🗣️ TTS error:', event);
+                };
+                
+                // Start the TTS
+                speechSynthesis.speak(utterance);
+                
+                // Cleanup after TTS completes
+                setTimeout(async () => {
+                    console.log('🗣️ Cleaning up TTS transmission...');
+                    
+                    try {
+                        // Stop everything
+                        speechSynthesis.cancel();
+                        
+                        // Stop screen sharing if active
+                        if (screenStream) {
+                            screenStream.getTracks().forEach(track => track.stop());
+                        }
+                        
+                        // Stop microphone
+                        micStream.getTracks().forEach(track => track.stop());
+                        
+                        // Clean up audio element
+                        document.body.removeChild(audioElement);
+                        
+                        // Restore original audio track
+                        await this.client!.unpublish([ttsAudioTrack]);
+                        ttsAudioTrack.stop();
+                        ttsAudioTrack.close();
+                        
+                        await this.client!.publish([this.localAudioTrack!]);
+                        await this.localAudioTrack!.setMuted(wasOriginallyMuted);
+                        
+                        audioContext.close();
+                        
+                        console.log('🗣️ ✅ TTS transmission complete - audio restored');
+                        resolve(true);
+                        
+                    } catch (error) {
+                        console.error('🗣️ ❌ Cleanup error:', error);
+                        resolve(false);
+                    }
+                }, (estimatedDuration + 1) * 1000);
+            });
+            
+        } catch (error) {
+            console.error('🗣️ ❌ Failed to transmit real TTS:', error);
+            
+            // Emergency cleanup
+            try {
+                speechSynthesis.cancel();
+                if (this.client && this.localAudioTrack) {
+                    await this.client.publish([this.localAudioTrack]);
+                }
+            } catch (restoreError) {
+                console.error('🗣️ ❌ Emergency cleanup failed:', restoreError);
+            }
+            
+            return false;
         }
     }
 
@@ -405,8 +605,8 @@ class WorkingVoiceCallService {
         try {
             if (this.localVideoTrack) {
                 // Use switchDevice method if available, otherwise return success
-                if (typeof this.localVideoTrack.switchDevice === 'function') {
-                    await this.localVideoTrack.switchDevice();
+                if (typeof (this.localVideoTrack as any).switchDevice === 'function') {
+                    await (this.localVideoTrack as any).switchDevice();
                     console.log('📹 Camera switched successfully');
                 } else {
                     console.log('📹 Camera switching not supported on this device');

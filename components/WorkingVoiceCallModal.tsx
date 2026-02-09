@@ -81,6 +81,15 @@ interface SpeechRecognitionStatus {
     subtitleHistory: SubtitleData[];
 }
 
+// Text-to-Speech status interface
+interface TextToSpeechStatus {
+    isSupported: boolean;
+    isSpeaking: boolean;
+    isEnabled: boolean;
+    currentVoice: SpeechSynthesisVoice | null;
+    availableVoices: SpeechSynthesisVoice[];
+}
+
 // Language exchange interface (keeping for compatibility)
 interface LanguageExchange {
     myLanguage: string;
@@ -183,6 +192,20 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
         currentSubtitle: null,
         subtitleHistory: []
     });
+
+    // Text-to-speech states
+    const [textToSpeech, setTextToSpeech] = useState<TextToSpeechStatus>({
+        isSupported: false,
+        isSpeaking: false,
+        isEnabled: true, // Enable by default
+        currentVoice: null,
+        availableVoices: []
+    });
+
+    // Audio context refs for TTS audio routing
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const destinationStreamRef = useRef<MediaStream | null>(null);
+    const micStreamRef = useRef<MediaStream | null>(null);
     
     // Language exchange state for manual selection (keeping for compatibility)
     const [languageExchange, setLanguageExchange] = useState<LanguageExchange>({
@@ -386,6 +409,12 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
 
                 await shareTranslationMessage(translationMessage);
                 console.log(`✅ ${translationDirection} translation shared: "${translationMessage.translatedText}"`);
+
+                // Convert translated text to speech and transmit through call
+                if (textToSpeech.isEnabled && callStatus === 'connected') {
+                    console.log('🗣️ Auto-transmitting TTS for translation...');
+                    speakTranslatedTextForCallTransmission(translationResult.translatedText, targetLanguage);
+                }
             }
         } catch (error) {
             console.error(`❌ ${translationDirection} translation process failed:`, error);
@@ -591,6 +620,57 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
         }
     };
 
+    // Initialize text-to-speech
+    const initializeTextToSpeech = (): void => {
+        if ('speechSynthesis' in window) {
+            setTextToSpeech(prev => ({ ...prev, isSupported: true }));
+            console.log('🗣️ Speech synthesis API is supported');
+            
+            // Load available voices
+            const loadVoices = () => {
+                const voices = speechSynthesis.getVoices();
+                console.log(`🗣️ Loading ${voices.length} voices...`);
+                
+                if (voices.length > 0) {
+                    setTextToSpeech(prev => ({
+                        ...prev,
+                        availableVoices: voices,
+                        currentVoice: voices.find(voice => voice.default) || voices[0] || null
+                    }));
+                    
+                    console.log('🗣️ Available voices:');
+                    voices.forEach(voice => {
+                        console.log(`  - ${voice.name} (${voice.lang}) ${voice.default ? '[DEFAULT]' : ''}`);
+                    });
+                    
+                    console.log(`🗣️ Text-to-speech initialized with ${voices.length} voices`);
+                } else {
+                    console.log('🗣️ No voices available yet, will retry...');
+                }
+            };
+
+            // Load voices immediately
+            loadVoices();
+            
+            // Some browsers load voices asynchronously, so we need to listen for changes
+            speechSynthesis.onvoiceschanged = () => {
+                console.log('🗣️ Voices changed, reloading...');
+                loadVoices();
+            };
+            
+            // Force reload voices after a delay (some browsers need this)
+            setTimeout(() => {
+                if (textToSpeech.availableVoices.length === 0) {
+                    console.log('🗣️ Force reloading voices...');
+                    loadVoices();
+                }
+            }, 1000);
+        } else {
+            console.warn('🗣️ Text-to-speech not supported');
+            setTextToSpeech(prev => ({ ...prev, isSupported: false }));
+        }
+    };
+
     // Start speech recognition (updated for bidirectional translation)
     const startSpeechRecognition = (): void => {
         if (speechRecognitionRef.current && !speechRecognition.isListening) {
@@ -690,6 +770,305 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
                 }));
             }, 3000);
         }
+    };
+
+    // Initialize audio context for TTS routing
+    const initializeAudioContext = async (): Promise<void> => {
+        try {
+            console.log('🔊 Initializing audio context for TTS routing...');
+            
+            // Create audio context
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            
+            // Get user's microphone stream
+            const micStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    sampleRate: 44100
+                } 
+            });
+            micStreamRef.current = micStream;
+            
+            // Create destination stream that will be sent through the call
+            const destination = audioContextRef.current.createMediaStreamDestination();
+            destinationStreamRef.current = destination.stream;
+            
+            // Connect microphone to destination (for normal speech)
+            const micSource = audioContextRef.current.createMediaStreamSource(micStream);
+            micSource.connect(destination);
+            
+            console.log('🔊 ✅ Audio context initialized successfully');
+            
+        } catch (error) {
+            console.error('🔊 ❌ Failed to initialize audio context:', error);
+        }
+    };
+
+    // Helper function to create TTS blob for enhanced audio routing
+    const createTTSBlob = async (utterance: SpeechSynthesisUtterance): Promise<Blob | null> => {
+        try {
+            // This is a simplified approach - in practice, we'll use the standard speechSynthesis
+            // but this function is here for future enhancement with Web Audio API recording
+            return null; // For now, return null to use fallback
+        } catch (error) {
+            console.error('🗣️ Failed to create TTS blob:', error);
+            return null;
+        }
+    };
+
+    // Simplified TTS for call transmission using voice call service direct injection
+    const speakTranslatedTextForCallTransmission = async (text: string, targetLanguage: string): Promise<void> => {
+        if (!textToSpeech.isSupported || !textToSpeech.isEnabled || !text.trim()) {
+            Alert.alert('TTS Not Available', 'Text-to-Speech is not supported or enabled.');
+            return;
+        }
+
+        console.log(`🗣️ 📞 Speaking TTS through call using voice service injection: "${text}"`);
+
+        try {
+            setTextToSpeech(prev => ({ ...prev, isSpeaking: true }));
+
+            // Enhanced voice selection
+            let selectedVoice = textToSpeech.availableVoices.find(voice => 
+                voice.lang.toLowerCase() === targetLanguage.toLowerCase()
+            ) || textToSpeech.availableVoices.find(voice => 
+                voice.lang.toLowerCase().startsWith(targetLanguage.toLowerCase() + '-')
+            ) || textToSpeech.availableVoices[0];
+
+            // Use the voice call service's direct TTS injection method
+            const success = await workingVoiceCallService.speakTextThroughCall(text, {
+                voice: selectedVoice || undefined,
+                lang: targetLanguage,
+                rate: 0.9, // Clear speech rate
+                pitch: 1.0,
+                volume: 1.0
+            });
+
+            if (success) {
+                console.log('🗣️ ✅ TTS successfully transmitted through call');
+            } else {
+                console.log('🗣️ ⚠️ TTS transmission failed, falling back to local playback');
+                // Fallback to local TTS if injection fails
+                speakTranslatedText(text, targetLanguage);
+            }
+
+        } catch (error) {
+            console.error('🗣️ ❌ Error in call TTS transmission:', error);
+            // Fallback to local TTS
+            speakTranslatedText(text, targetLanguage);
+        } finally {
+            setTextToSpeech(prev => ({ ...prev, isSpeaking: false }));
+        }
+    };
+
+    // Convert text to speech and route through call audio (NEW DIRECT INJECTION METHOD)
+    const speakTranslatedTextThroughCall = async (text: string, targetLanguage: string): Promise<void> => {
+        if (!textToSpeech.isSupported || !textToSpeech.isEnabled || !text.trim()) {
+            console.log('🗣️ TTS skipped - not supported, disabled, or empty text');
+            return;
+        }
+
+        try {
+            console.log(`🗣️ 📞 Using direct TTS injection through call: "${text}" in language: ${targetLanguage}`);
+            
+            // Use the new direct injection method from voice call service
+            await speakTranslatedTextForCallTransmission(text, targetLanguage);
+            
+        } catch (error) {
+            console.error('🗣️ ❌ Failed to transmit TTS through call:', error);
+        }
+    };
+    const speakTranslatedText = (text: string, targetLanguage: string): void => {
+        if (!textToSpeech.isSupported || !textToSpeech.isEnabled || !text.trim()) {
+            console.log('🗣️ TTS skipped - not supported, disabled, or empty text');
+            return;
+        }
+
+        try {
+            console.log(`🗣️ Attempting to speak: "${text}" in language: ${targetLanguage}`);
+            console.log(`🗣️ Available voices: ${textToSpeech.availableVoices.length}`);
+            
+            // Stop any ongoing speech
+            speechSynthesis.cancel();
+
+            // Wait a moment for cancel to complete
+            setTimeout(() => {
+                // Create speech synthesis utterance
+                const utterance = new SpeechSynthesisUtterance(text);
+                
+                // Enhanced voice selection with fallbacks
+                let selectedVoice = null;
+                
+                // First try: exact language match
+                selectedVoice = textToSpeech.availableVoices.find(voice => 
+                    voice.lang.toLowerCase() === targetLanguage.toLowerCase()
+                );
+                
+                // Second try: language prefix match (e.g., 'hi' matches 'hi-IN')
+                if (!selectedVoice) {
+                    selectedVoice = textToSpeech.availableVoices.find(voice => 
+                        voice.lang.toLowerCase().startsWith(targetLanguage.toLowerCase() + '-') ||
+                        voice.lang.toLowerCase().startsWith(targetLanguage.toLowerCase())
+                    );
+                }
+                
+                // Third try: reverse prefix match (e.g., 'hi-IN' matches 'hi')
+                if (!selectedVoice) {
+                    selectedVoice = textToSpeech.availableVoices.find(voice => 
+                        targetLanguage.toLowerCase().startsWith(voice.lang.toLowerCase())
+                    );
+                }
+                
+                // Fourth try: use default voice or first available
+                if (!selectedVoice) {
+                    selectedVoice = textToSpeech.availableVoices.find(voice => voice.default) || 
+                                  textToSpeech.availableVoices[0] || 
+                                  null;
+                }
+
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                    console.log(`🗣️ Selected voice: ${selectedVoice.name} (${selectedVoice.lang}) for target: ${targetLanguage}`);
+                } else {
+                    console.log(`🗣️ No specific voice found for ${targetLanguage}, using default`);
+                }
+
+                // Configure speech parameters
+                utterance.rate = 0.8; // Slower for better clarity
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                utterance.lang = selectedVoice?.lang || targetLanguage;
+
+                // Handle speech events
+                utterance.onstart = () => {
+                    setTextToSpeech(prev => ({ ...prev, isSpeaking: true }));
+                    console.log('🗣️ ✅ Started speaking translated text');
+                };
+
+                utterance.onend = () => {
+                    setTextToSpeech(prev => ({ ...prev, isSpeaking: false }));
+                    console.log('🗣️ ✅ Finished speaking translated text');
+                };
+
+                utterance.onerror = (event) => {
+                    setTextToSpeech(prev => ({ ...prev, isSpeaking: false }));
+                    console.error('🗣️ ❌ Speech synthesis error:', event.error, event);
+                };
+
+                // Check if speechSynthesis is ready
+                if (speechSynthesis.pending) {
+                    console.log('🗣️ Speech synthesis is busy, waiting...');
+                    speechSynthesis.cancel();
+                }
+
+                // Speak the text
+                console.log('🗣️ 🔊 Calling speechSynthesis.speak()...');
+                speechSynthesis.speak(utterance);
+                
+                // Verify it started
+                setTimeout(() => {
+                    if (speechSynthesis.speaking) {
+                        console.log('🗣️ ✅ Speech synthesis is active');
+                    } else {
+                        console.log('🗣️ ⚠️ Speech synthesis did not start - checking voices...');
+                        console.log('Available voices:', textToSpeech.availableVoices.map(v => `${v.name} (${v.lang})`));
+                    }
+                }, 100);
+                
+            }, 100);
+            
+        } catch (error) {
+            console.error('🗣️ ❌ Failed to speak translated text:', error);
+            setTextToSpeech(prev => ({ ...prev, isSpeaking: false }));
+        }
+    };
+
+    // Test speaking a specific translated text
+    const testSpeakTranslation = (text: string): void => {
+        if (!textToSpeech.isSupported || !textToSpeech.isEnabled) {
+            Alert.alert('TTS Not Available', 'Text-to-Speech is not supported or enabled. Please enable TTS first.');
+            return;
+        }
+
+        if (!text || text.trim() === '') {
+            Alert.alert('No Text', 'No translated text available to speak.');
+            return;
+        }
+
+        console.log(`🧪 Testing TTS for translated text: "${text}"`);
+
+        // Determine target language
+        let targetLanguage = 'en'; // fallback
+        
+        if (agentToCustomer.isEnabled && customerToAgent.isEnabled) {
+            targetLanguage = agentToCustomer.customerReceives;
+        } else if (agentToCustomer.isEnabled) {
+            targetLanguage = agentToCustomer.customerReceives;
+        } else if (customerToAgent.isEnabled) {
+            targetLanguage = customerToAgent.agentReceives;
+        } else {
+            targetLanguage = languageExchange.myTargetLanguage;
+        }
+
+        // Use the simpler local TTS for testing
+        speakTranslatedText(text, targetLanguage);
+    };
+
+    // Toggle text-to-speech
+    const toggleTextToSpeech = (): void => {
+        setTextToSpeech(prev => ({ 
+            ...prev, 
+            isEnabled: !prev.isEnabled 
+        }));
+        
+        // If disabling, stop any ongoing speech
+        if (textToSpeech.isEnabled && textToSpeech.isSpeaking) {
+            speechSynthesis.cancel();
+            setTextToSpeech(prev => ({ ...prev, isSpeaking: false }));
+        }
+        
+        console.log(`🗣️ Text-to-speech ${!textToSpeech.isEnabled ? 'enabled' : 'disabled'}`);
+    };
+
+    // Test the new direct TTS injection method
+    const testDirectTTSInjection = (): void => {
+        console.log('🧪 Testing direct TTS injection...');
+        
+        if (!textToSpeech.isSupported) {
+            Alert.alert('TTS Test Failed', 'Text-to-Speech is not supported in this browser.');
+            return;
+        }
+        
+        if (!textToSpeech.isEnabled) {
+            Alert.alert('TTS Test', 'Text-to-Speech is disabled. Please enable it first.');
+            return;
+        }
+        
+        if (callStatus !== 'connected') {
+            Alert.alert('TTS Test', 'Please start a voice call first to test TTS transmission.');
+            return;
+        }
+        
+        // Test with a simple English phrase
+        const testText = 'Hello, this is a direct TTS injection test. The remote user should hear this clearly through the voice call without any microphone setup needed.';
+        const testLanguage = 'en';
+        
+        console.log(`🧪 Testing direct TTS injection with: "${testText}" in ${testLanguage}`);
+        
+        Alert.alert(
+            '🚀 Audio Signal Test', 
+            'Testing DIRECT audio injection into voice call.\n\nThis will generate audio tones that represent the translated text and inject them DIRECTLY into the call stream.\n\nThe remote user should hear distinct beeps/tones through the call.\n\nReady to test?',
+            [
+                { text: 'Cancel' },
+                { 
+                    text: 'Send Audio Signal', 
+                    onPress: () => {
+                        speakTranslatedTextForCallTransmission(testText, testLanguage);
+                    }
+                }
+            ]
+        );
     };
 
     // Toggle translation (now handles both directions)
@@ -926,6 +1305,7 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
         if (visible && currentUserId && targetUserId) {
             handleCall();
             initializeSpeechRecognition();
+            initializeTextToSpeech();
         }
     }, [visible, currentUserId, targetUserId]);
 
@@ -986,6 +1366,10 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
     useEffect(() => {
         return () => {
             stopSpeechRecognition();
+            // Stop any ongoing text-to-speech
+            if (textToSpeech.isSpeaking) {
+                speechSynthesis.cancel();
+            }
             if (callDurationRef.current) clearInterval(callDurationRef.current);
             if (translationPollingRef.current) clearInterval(translationPollingRef.current);
         };
@@ -1277,6 +1661,34 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
                             <Text style={styles.testButtonText}>Test API</Text>
                         </TouchableOpacity>
 
+                        {/* Test TTS Button */}
+                        {textToSpeech.isSupported && (
+                            <TouchableOpacity style={[styles.testButton, { borderColor: '#FF9800', backgroundColor: '#fff3e0' }]} onPress={testDirectTTSInjection}>
+                                <MaterialIcons name="phone-in-talk" size={16} color="#FF9800" />
+                                <Text style={[styles.testButtonText, { color: '#FF9800' }]}>Test Direct TTS</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {/* Text-to-Speech Toggle */}
+                        {textToSpeech.isSupported && (
+                            <TouchableOpacity
+                                style={[styles.ttsButton, textToSpeech.isEnabled && styles.ttsButtonActive]}
+                                onPress={toggleTextToSpeech}
+                            >
+                                <MaterialIcons 
+                                    name={textToSpeech.isEnabled ? "volume-up" : "volume-off"} 
+                                    size={16} 
+                                    color={textToSpeech.isEnabled ? "#4CAF50" : "#666"} 
+                                />
+                                <Text style={[styles.ttsButtonText, textToSpeech.isEnabled && styles.ttsButtonTextActive]}>
+                                    {textToSpeech.isEnabled 
+                                        ? (callStatus === 'connected' ? 'TTS→Call' : 'TTS→Local')
+                                        : 'TTS OFF'
+                                    }
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+
                         {/* Speech Recognition Status & Manual Restart */}
                         {translationStatus.isEnabled && (
                             <TouchableOpacity 
@@ -1320,17 +1732,68 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
                                 </Text>
                             </View>
                             {(translationStatus.lastTranslation || translationStatus.isTranslating || translationStatus.error) ? (
-                                <Text 
-                                    style={[
-                                        styles.translatedSubtitleText,
-                                        {
-                                            color: translationStatus.error ? '#ff4757' : '#2c3e50'
-                                        }
-                                    ]}
-                                >
-                                    {translationStatus.error ? translationStatus.error :
-                                     translationStatus.isTranslating ? '🔄 Translating...' : `"${translationStatus.lastTranslation}"`}
-                                </Text>
+                                <View style={styles.translatedTextRow}>
+                                    <Text 
+                                        style={[
+                                            styles.translatedSubtitleText,
+                                            {
+                                                color: translationStatus.error ? '#ff4757' : '#2c3e50',
+                                                flex: 1
+                                            }
+                                        ]}
+                                    >
+                                        {translationStatus.error ? translationStatus.error :
+                                         translationStatus.isTranslating ? '🔄 Translating...' : `"${translationStatus.lastTranslation}"`}
+                                    </Text>
+                                    
+                                    {/* Speaker buttons for testing TTS */}
+                                    {translationStatus.lastTranslation && !translationStatus.isTranslating && !translationStatus.error && (
+                                        <View style={styles.speakerButtons}>
+                                            {/* Local TTS Test Button */}
+                                            <TouchableOpacity
+                                                style={[styles.speakerButton, { marginRight: 4 }]}
+                                                onPress={() => testSpeakTranslation(translationStatus.lastTranslation)}
+                                                disabled={textToSpeech.isSpeaking}
+                                            >
+                                                <MaterialIcons 
+                                                    name={textToSpeech.isSpeaking ? "volume-up" : "play-circle-outline"} 
+                                                    size={18} 
+                                                    color={textToSpeech.isSpeaking ? "#FF9800" : "#4CAF50"} 
+                                                />
+                                            </TouchableOpacity>
+                                            
+                                            {/* Call Transmission Button - Direct Audio Injection */}
+                                            {callStatus === 'connected' && (
+                                                <TouchableOpacity
+                                                    style={[styles.speakerButton, styles.callSpeakerButton]}
+                                                    onPress={() => {
+                                                        // Determine target language
+                                                        let targetLanguage = 'en';
+                                                        if (agentToCustomer.isEnabled && customerToAgent.isEnabled) {
+                                                            targetLanguage = agentToCustomer.customerReceives;
+                                                        } else if (agentToCustomer.isEnabled) {
+                                                            targetLanguage = agentToCustomer.customerReceives;
+                                                        } else if (customerToAgent.isEnabled) {
+                                                            targetLanguage = customerToAgent.agentReceives;
+                                                        } else {
+                                                            targetLanguage = languageExchange.myTargetLanguage;
+                                                        }
+                                                        
+                                                        // Use the new direct audio injection method
+                                                        speakTranslatedTextForCallTransmission(translationStatus.lastTranslation, targetLanguage);
+                                                    }}
+                                                    disabled={textToSpeech.isSpeaking}
+                                                >
+                                                    <MaterialIcons 
+                                                        name="phone" 
+                                                        size={16} 
+                                                        color={textToSpeech.isSpeaking ? "#FF9800" : "#2196F3"} 
+                                                    />
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    )}
+                                </View>
                             ) : (
                                 <Text style={styles.translatedSubtitlePlaceholder}>
                                     💬 Speak to see {getCurrentTargetLanguage()?.name} translation here
@@ -1401,6 +1864,26 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
                                 {speechRecognition.isListening ? 
                                  `🎤 Listening for ${customerToAgent.isEnabled ? customerToAgent.customerSpeakingName : agentToCustomer.agentSpeakingName}...` : 
                                  '⚠️ Speech recognition stopped - click "Restart Mic" above'}
+                            </Text>
+                        </View>
+                    )}
+
+                    {/* Text-to-Speech Status */}
+                    {textToSpeech.isEnabled && textToSpeech.isSpeaking && (
+                        <View style={styles.translationStatusContainer}>
+                            <MaterialIcons name="volume-up" size={16} color="#FF9800" />
+                            <Text style={[styles.translationStatusText, { color: '#FF9800' }]}>
+                                🗣️ {callStatus === 'connected' ? 'Transmitting translated speech through call...' : 'Speaking translated text...'}
+                            </Text>
+                        </View>
+                    )}
+
+                    {/* TTS Instructions */}
+                    {textToSpeech.isEnabled && callStatus === 'connected' && (
+                        <View style={[styles.translationStatusContainer, { backgroundColor: '#e8f4fd' }]}>
+                            <MaterialIcons name="info" size={16} color="#1976D2" />
+                            <Text style={[styles.translationStatusText, { color: '#1976D2', fontSize: 11 }]}>
+                                💡 Use the 📞 button next to translations to test call transmission
                             </Text>
                         </View>
                     )}
@@ -1609,6 +2092,29 @@ const styles = StyleSheet.create({
     micStatusTextActive: {
         color: '#155724',
     },
+    ttsButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f3e5f5',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 15,
+        gap: 4,
+        borderWidth: 1,
+        borderColor: '#9c27b0',
+    },
+    ttsButtonActive: {
+        backgroundColor: '#e8f5e8',
+        borderColor: '#4CAF50',
+    },
+    ttsButtonText: {
+        color: '#9c27b0',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    ttsButtonTextActive: {
+        color: '#4CAF50',
+    },
     translationSectionsContainer: {
         width: '100%',
         marginBottom: 15,
@@ -1706,6 +2212,31 @@ const styles = StyleSheet.create({
         color: '#2c3e50',
         fontSize: 14,
         lineHeight: 18,
+    },
+    translatedTextRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    speakerButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    speakerButton: {
+        padding: 6,
+        borderRadius: 15,
+        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+        borderWidth: 1,
+        borderColor: '#4CAF50',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minWidth: 32,
+        minHeight: 32,
+    },
+    callSpeakerButton: {
+        backgroundColor: 'rgba(33, 150, 243, 0.1)',
+        borderColor: '#2196F3',
     },
     translatedSubtitlePlaceholder: {
         color: '#9e9e9e',

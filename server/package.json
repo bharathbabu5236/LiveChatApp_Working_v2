@@ -1,0 +1,28 @@
+{
+  "name": "livechat-tts-server",
+  "version": "1.0.0",
+  "description": "Server-side Text-to-Speech service for LiveChat voice calls",
+  "main": "tts-server.js",
+  "scripts": {
+    "start": "node tts-server.js",
+    "dev": "nodemon tts-server.js",
+    "test": "node test-tts.js"
+  },
+  "dependencies": {
+    "@google-cloud/text-to-speech": "^5.0.0",
+    "cors": "^2.8.5",
+    "expo-speech": "^14.0.8",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "keywords": [
+    "text-to-speech",
+    "voice-calls",
+    "google-cloud",
+    "translation"
+  ],
+  "author": "LiveChat Team",
+  "license": "MIT"
+}

@@ -8,6 +8,7 @@ import AgoraRTC, {
     ConnectionState,
     ConnectionDisconnectedReason
 } from 'agora-rtc-sdk-ng';
+import serverTTSService, { TTSRequest } from './serverTTSService';
 
 // Remote user type from Agora SDK
 type IRemoteUser = any; // Using any for now as the exact type export varies by SDK version
@@ -649,6 +650,235 @@ class WorkingVoiceCallService {
             console.error('📹 Camera permission denied:', error);
             return false;
         }
+    }
+
+    // 🚀 NEW SERVER-SIDE TTS METHOD - The REAL solution!
+    // Inject server-generated TTS audio directly into the call stream
+    async speakTextThroughCallServerTTS(text: string, languageCode: string, options: {
+        voiceName?: string;
+        audioEncoding?: 'MP3' | 'WAV';
+        volume?: number;
+    } = {}): Promise<boolean> {
+        try {
+            console.log(`🗣️ 🌐 SERVER TTS: Speaking "${text}" in ${languageCode}`);
+
+            // Check if we have an active call
+            if (!this.localAudioTrack || !this.client) {
+                console.error('🗣️ ❌ No active call or audio track');
+                return false;
+            }
+
+            // Format the language code for Google Cloud TTS
+            const ttsLanguageCode = serverTTSService.constructor.formatLanguageCodeForTTS(languageCode);
+
+            // Request TTS from server
+            const ttsRequest: TTSRequest = {
+                text: text,
+                languageCode: ttsLanguageCode,
+                voiceName: options.voiceName,
+                audioEncoding: options.audioEncoding || 'MP3'
+            };
+
+            console.log(`🗣️ Requesting server TTS...`, ttsRequest);
+            const ttsResponse = await serverTTSService.generateSpeech(ttsRequest);
+
+            if (!ttsResponse.success || !ttsResponse.audioBlob) {
+                console.error('🗣️ ❌ Server TTS failed:', ttsResponse.error);
+                return false;
+            }
+
+            console.log(`🗣️ ✅ Server TTS generated: ${ttsResponse.audioBlob.size} bytes`);
+
+            // Create audio element to play the TTS blob
+            const audioUrl = URL.createObjectURL(ttsResponse.audioBlob);
+            const audioElement = document.createElement('audio');
+            audioElement.src = audioUrl;
+            audioElement.volume = options.volume || 0.8;
+
+            // Create audio context for injection
+            const audioContext = new AudioContext();
+            const destination = audioContext.createMediaStreamDestination();
+            const masterGain = audioContext.createGain();
+            masterGain.gain.setValueAtTime(0.0, audioContext.currentTime);
+            masterGain.connect(destination);
+
+            // Create audio source from the blob audio element
+            const audioSource = audioContext.createMediaElementSource(audioElement);
+            const audioGain = audioContext.createGain();
+            audioGain.gain.setValueAtTime(1.0, audioContext.currentTime);
+            audioSource.connect(audioGain);
+            audioGain.connect(masterGain);
+
+            // Get microphone for mixing (optional - to allow simultaneous speech)
+            let micSource: MediaStreamAudioSourceNode | null = null;
+            let micGain: GainNode | null = null;
+
+            try {
+                const micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: false
+                    }
+                });
+
+                micSource = audioContext.createMediaStreamSource(micStream);
+                micGain = audioContext.createGain();
+                micGain.gain.setValueAtTime(0.3, audioContext.currentTime); // Lower mic during TTS
+                micSource.connect(micGain);
+                micGain.connect(masterGain);
+                
+                console.log('🎤 Microphone mixed with TTS');
+            } catch (micError) {
+                console.log('🎤 Microphone mixing disabled:', micError);
+                // Continue without microphone mixing
+            }
+
+            // Create custom audio track for injection
+            const ttsAudioTrack = await AgoraRTC.createCustomAudioTrack({
+                mediaStreamTrack: destination.stream.getAudioTracks()[0]
+            });
+
+            // Replace current audio track with TTS track
+            console.log('🗣️ Injecting TTS audio into call...');
+            await this.client.unpublish([this.localAudioTrack]);
+            
+            // Enable audio output
+            masterGain.gain.setValueAtTime(1.0, audioContext.currentTime);
+
+            // Publish TTS track
+            await this.client.publish([ttsAudioTrack]);
+            console.log('🗣️ ✅ TTS audio track published');
+
+            // Play the audio and wait for completion
+            return new Promise<boolean>((resolve, reject) => {
+                audioElement.oncanplaythrough = () => {
+                    console.log('🗣️ 🔊 Playing TTS audio...');
+                    audioElement.play().catch(playError => {
+                        console.error('🗣️ ❌ Audio playback error:', playError);
+                        reject(false);
+                    });
+                };
+
+                audioElement.onended = async () => {
+                    console.log('🗣️ ✅ TTS audio playback completed');
+                    
+                    try {
+                        // Clean up: restore original audio track
+                        await this.client!.unpublish([ttsAudioTrack]);
+                        await this.client!.publish([this.localAudioTrack!]);
+                        
+                        // Restore microphone volume if it was mixed
+                        if (micGain) {
+                            micGain.gain.setValueAtTime(1.0, audioContext.currentTime);
+                        }
+                        
+                        // Clean up resources
+                        URL.revokeObjectURL(audioUrl);
+                        audioElement.remove();
+                        audioContext.close().catch(e => console.warn('AudioContext close warning:', e));
+                        
+                        console.log('🗣️ ✅ Audio track restored, TTS transmission complete');
+                        resolve(true);
+                        
+                    } catch (restoreError) {
+                        console.error('🗣️ ⚠️ Error restoring audio track:', restoreError);
+                        resolve(true); // Still consider it successful since TTS was transmitted
+                    }
+                };
+
+                audioElement.onerror = (audioError) => {
+                    console.error('🗣️ ❌ Audio element error:', audioError);
+                    
+                    // Clean up on error
+                    URL.revokeObjectURL(audioUrl);
+                    audioElement.remove();
+                    audioContext.close().catch(e => console.warn('AudioContext close warning:', e));
+                    
+                    reject(false);
+                };
+
+                // Start loading audio
+                audioElement.load();
+            });
+
+        } catch (error) {
+            console.error('🗣️ ❌ Server TTS injection failed:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Public method to inject custom audio stream into call
+     */
+    async injectCustomAudio(audioStream: MediaStream): Promise<boolean> {
+        try {
+            if (!this.client || !this.localAudioTrack) {
+                console.error('❌ No active call to inject audio into');
+                console.log(`📊 Client: ${!!this.client}, LocalAudio: ${!!this.localAudioTrack}, Joined: ${this.isJoined}`);
+                return false;
+            }
+
+            if (!this.isJoined) {
+                console.error('❌ Not joined to any channel yet');
+                return false;
+            }
+
+            console.log('🔊 Injecting custom audio into call...');
+            console.log(`📊 Audio stream tracks: ${audioStream.getAudioTracks().length}`);
+
+            // Get the audio track
+            const audioTrack = audioStream.getAudioTracks()[0];
+            if (!audioTrack) {
+                throw new Error('No audio track found in stream');
+            }
+
+            console.log(`🎵 Audio track: ${audioTrack.label}, enabled: ${audioTrack.enabled}, readyState: ${audioTrack.readyState}`);
+
+            // Create Agora custom audio track
+            const customTrack = await AgoraRTC.createCustomAudioTrack({
+                mediaStreamTrack: audioTrack
+            });
+
+            console.log('🎯 Created custom Agora track');
+
+            // Replace current audio with custom audio
+            console.log('🔄 Unpublishing original audio...');
+            await this.client.unpublish([this.localAudioTrack]);
+            
+            console.log('🔄 Publishing TTS audio...');
+            await this.client.publish([customTrack]);
+
+            console.log('✅ Custom audio injected successfully');
+
+            // Restore original audio after 5 seconds
+            setTimeout(async () => {
+                try {
+                    if (this.client && this.localAudioTrack) {
+                        console.log('🔄 Restoring original audio...');
+                        await this.client.unpublish([customTrack]);
+                        await this.client.publish([this.localAudioTrack]);
+                        console.log('🔊 Original audio track restored');
+                    }
+                } catch (restoreError) {
+                    console.error('⚠️ Failed to restore original audio:', restoreError);
+                }
+            }, 5000);
+
+            return true;
+
+        } catch (error) {
+            console.error('❌ Custom audio injection failed:', error);
+            console.error('Stack:', error.stack);
+            return false;
+        }
+    }
+
+    /**
+     * Check if service is ready for audio injection
+     */
+    isReadyForAudioInjection(): boolean {
+        return !!(this.client && this.localAudioTrack && this.isJoined);
     }
 }
 

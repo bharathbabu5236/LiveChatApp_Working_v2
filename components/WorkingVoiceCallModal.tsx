@@ -3,6 +3,13 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert, Modal, ScrollView, Act
 import { MaterialIcons } from '@expo/vector-icons';
 import workingVoiceCallService from '../services/workingVoiceCallService';
 import { translateText as translateTextService } from '../translationService';
+import expoTTSService from '../services/expoTTSService';
+import perfectTTSService from '../services/perfectTTSService';
+import loudTTSService from '../services/loudTTSService';
+import directTTSService from '../services/directTTSService';
+import workingTTSService from '../services/workingTTSService';
+import simpleTTSService from '../services/simpleTTSService';
+import audioFileTTSService from '../services/audioFileTTSService';
 
 // Web-compatible translation interface
 interface TranslationResult {
@@ -817,46 +824,179 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
         }
     };
 
-    // Simplified TTS for call transmission using voice call service direct injection
+    // 🎵 ALTERNATIVE SIMPLE TTS - No server needed!
     const speakTranslatedTextForCallTransmission = async (text: string, targetLanguage: string): Promise<void> => {
-        if (!textToSpeech.isSupported || !textToSpeech.isEnabled || !text.trim()) {
-            Alert.alert('TTS Not Available', 'Text-to-Speech is not supported or enabled.');
+        if (!text.trim()) {
+            console.log('🗣️ TTS skipped - empty text');
             return;
         }
 
-        console.log(`🗣️ 📞 Speaking TTS through call using voice service injection: "${text}"`);
+        console.log(`🗣️ � SIMPLE TTS: Speaking "${text}" in ${targetLanguage}`);
 
         try {
             setTextToSpeech(prev => ({ ...prev, isSpeaking: true }));
 
-            // Enhanced voice selection
-            let selectedVoice = textToSpeech.availableVoices.find(voice => 
-                voice.lang.toLowerCase() === targetLanguage.toLowerCase()
-            ) || textToSpeech.availableVoices.find(voice => 
-                voice.lang.toLowerCase().startsWith(targetLanguage.toLowerCase() + '-')
-            ) || textToSpeech.availableVoices[0];
+            // Try multiple simple approaches
+            console.log('� Trying WORKING TTS approach...');
+            // ✅ STEP 1: Try SERVER TTS (Google Cloud - generates REAL speech files)
+            console.log('🌐 Trying SERVER TTS (Google Cloud)...');
+            let success = false;
+            
+            try {
+                // Use server TTS service we already set up
+                console.log('🌐 Making request to server TTS...');
+                const serverResult = await fetch('http://localhost:3001/api/tts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        languageCode: targetLanguage === 'zh' ? 'zh-CN' : 
+                                     targetLanguage === 'fil' ? 'fil-PH' : 
+                                     targetLanguage === 'en' ? 'en-US' : `${targetLanguage}`,
+                        audioEncoding: 'MP3'
+                        // Don't send voiceName, let Google pick the best voice
+                    })
+                });
 
-            // Use the voice call service's direct TTS injection method
-            const success = await workingVoiceCallService.speakTextThroughCall(text, {
-                voice: selectedVoice || undefined,
-                lang: targetLanguage,
-                rate: 0.9, // Clear speech rate
-                pitch: 1.0,
-                volume: 1.0
-            });
+                console.log('🌐 Server response status:', serverResult.status, serverResult.statusText);
+
+                if (serverResult.ok) {
+                    console.log('🌐 Server responded successfully');
+                    const audioBlob = await serverResult.blob();
+                    console.log('🌐 Server TTS audio blob received:', audioBlob.size, 'bytes');
+                    
+                    // Convert blob to audio stream and inject
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    console.log('🌐 Created blob URL:', audioUrl);
+                    const audioElement = document.createElement('audio');
+                    audioElement.src = audioUrl;
+                    audioElement.crossOrigin = 'anonymous';
+                    
+                    await new Promise((resolve, reject) => {
+                        audioElement.oncanplaythrough = () => {
+                            console.log('🌐 Audio can play through');
+                            resolve();
+                        };
+                        audioElement.onerror = (error) => {
+                            console.error('🌐 Audio element error:', error);
+                            reject(error);
+                        };
+                        audioElement.load();
+                    });
+
+                    console.log('🌐 Creating audio context...');
+                    const audioContext = new AudioContext();
+                    const source = audioContext.createMediaElementSource(audioElement);
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.value = 2.0; // Boost for headphones
+                    
+                    const destination = audioContext.createMediaStreamDestination();
+                    source.connect(gainNode);
+                    gainNode.connect(destination);
+                    
+                    console.log('🌐 Starting audio playback...');
+                    audioElement.play();
+                    
+                    console.log('🌐 Injecting audio stream...');
+                    success = await workingVoiceCallService.injectCustomAudio(destination.stream);
+                    
+                    // Cleanup
+                    setTimeout(() => {
+                        URL.revokeObjectURL(audioUrl);
+                        audioElement.remove();
+                    }, 5000);
+                } else {
+                    console.error('🌐 Server TTS request failed:', serverResult.status, serverResult.statusText);
+                    const errorText = await serverResult.text();
+                    console.error('🌐 Server error details:', errorText);
+                }
+            } catch (serverError) {
+                console.error('🌐 Server TTS network error:', serverError);
+            }
+
+            if (!success) {
+                console.log('🗣️ Fallback: Trying Expo Speech TTS...');
+                success = await expoTTSService.speakForCall(text, {
+                    language: targetLanguage === 'zh' ? 'zh-CN' : 
+                             targetLanguage === 'fil' ? 'fil-PH' : 
+                             `${targetLanguage}-${targetLanguage === 'en' ? 'US' : targetLanguage.toUpperCase()}`,
+                    pitch: 1.2,
+                    rate: 0.9,
+                    voice: undefined
+                });
+            }
+
+            if (!success) {
+                console.log('🔊 Fallback: Trying LOUD TTS approach...');
+                success = await loudTTSService.transmitLoudTTS(text, {
+                    volume: 0.9
+                });
+            }
+
+            if (!success) {
+                console.log('🎯 Fallback: Trying DIRECT TTS approach...');
+                success = await directTTSService.transmitTTS(text, {
+                    lang: targetLanguage === 'zh' ? 'zh-CN' : 
+                          targetLanguage === 'fil' ? 'tl-PH' : 
+                          `${targetLanguage}-${targetLanguage === 'en' ? 'US' : 'IN'}`,
+                    rate: 0.8,
+                    pitch: 1.0,
+                    volume: 0.7
+                });
+            }
+
+            if (!success) {
+                console.log('🎯 Fallback: Trying WORKING TTS approach...');
+                success = await workingTTSService.speakThroughCall(text, {
+                    lang: targetLanguage === 'zh' ? 'zh-CN' : 
+                          targetLanguage === 'fil' ? 'tl-PH' : 
+                          `${targetLanguage}-${targetLanguage === 'en' ? 'US' : 'IN'}`,
+                    rate: 0.8,
+                    pitch: 1.0,
+                    volume: 0.7
+                });
+            }
+
+            if (!success) {
+                console.log('🔊 Fallback: Trying Simple Audio Capture approach...');
+                success = await simpleTTSService.speakThroughCall(text, {
+                    lang: targetLanguage === 'zh' ? 'zh-CN' : 
+                          targetLanguage === 'fil' ? 'tl-PH' : 
+                          `${targetLanguage}-${targetLanguage === 'en' ? 'US' : 'IN'}`,
+                    rate: 0.8,
+                    pitch: 1.0,
+                    volume: 0.9
+                });
+            }
+
+            if (!success) {
+                console.log('🔊 Trying Audio File approach...');
+                success = await audioFileTTSService.speakThroughCall(text, {
+                    language: targetLanguage
+                });
+            }
 
             if (success) {
-                console.log('🗣️ ✅ TTS successfully transmitted through call');
+                console.log('🌐✅ SERVER TTS transmitted successfully through call');
             } else {
-                console.log('🗣️ ⚠️ TTS transmission failed, falling back to local playback');
-                // Fallback to local TTS if injection fails
-                speakTranslatedText(text, targetLanguage);
+                throw new Error('All TTS methods failed');
             }
 
         } catch (error) {
-            console.error('🗣️ ❌ Error in call TTS transmission:', error);
+            console.error('🗣️ ❌ Alternative TTS failed:', error);
+            
             // Fallback to local TTS
-            speakTranslatedText(text, targetLanguage);
+            Alert.alert(
+                'TTS Transmission Failed', 
+                `Could not transmit speech through call: ${error instanceof Error ? error.message : 'Unknown error'}\n\nFalling back to local speaker playback.`,
+                [
+                    { text: 'OK' },
+                    { 
+                        text: 'Play Locally', 
+                        onPress: () => speakTranslatedText(text, targetLanguage) 
+                    }
+                ]
+            );
         } finally {
             setTextToSpeech(prev => ({ ...prev, isSpeaking: false }));
         }
@@ -1031,44 +1171,84 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
         console.log(`🗣️ Text-to-speech ${!textToSpeech.isEnabled ? 'enabled' : 'disabled'}`);
     };
 
-    // Test the new direct TTS injection method
+    // Test alternative TTS approaches
     const testDirectTTSInjection = (): void => {
-        console.log('🧪 Testing direct TTS injection...');
-        
-        if (!textToSpeech.isSupported) {
-            Alert.alert('TTS Test Failed', 'Text-to-Speech is not supported in this browser.');
-            return;
-        }
-        
-        if (!textToSpeech.isEnabled) {
-            Alert.alert('TTS Test', 'Text-to-Speech is disabled. Please enable it first.');
-            return;
-        }
+        console.log('🗣️ Testing REAL TTS approaches...');
         
         if (callStatus !== 'connected') {
-            Alert.alert('TTS Test', 'Please start a voice call first to test TTS transmission.');
+            Alert.alert('TTS Test', 'Please start a voice call first to test REAL TTS.');
             return;
         }
         
-        // Test with a simple English phrase
-        const testText = 'Hello, this is a direct TTS injection test. The remote user should hear this clearly through the voice call without any microphone setup needed.';
-        const testLanguage = 'en';
-        
-        console.log(`🧪 Testing direct TTS injection with: "${testText}" in ${testLanguage}`);
+        console.log('🗣️ Testing REAL TTS - actual speech audio');
         
         Alert.alert(
-            '🚀 Audio Signal Test', 
-            'Testing DIRECT audio injection into voice call.\n\nThis will generate audio tones that represent the translated text and inject them DIRECTLY into the call stream.\n\nThe remote user should hear distinct beeps/tones through the call.\n\nReady to test?',
+            '🗣️ REAL TTS Test', 
+            'Testing REAL TTS approach:\n\n🗣️ Uses Expo Speech + Web Speech API\n🔊 Generates actual human speech\n� Captured and injected into call\n🎵 Should sound like real speech!\n\nReady to test?',
             [
                 { text: 'Cancel' },
                 { 
-                    text: 'Send Audio Signal', 
-                    onPress: () => {
-                        speakTranslatedTextForCallTransmission(testText, testLanguage);
+                    text: '🗣️ Test Real Speech', 
+                    onPress: async () => {
+                        console.log('🗣️ Starting REAL TTS test...');
+                        try {
+                            const testText = "Hello! This is a test of real speech transmission through your headphones.";
+                            const success = await expoTTSService.speakForCall(testText, {
+                                language: 'en-US',
+                                pitch: 1.2,
+                                rate: 0.9
+                            });
+                            if (success) {
+                                Alert.alert('🗣️ Test Sent!', 'Real speech audio transmitted! Ask the other person if they heard actual speech.');
+                            } else {
+                                Alert.alert('❌ Test Failed', 'Could not transmit real speech. Check console for errors.');
+                            }
+                        } catch (error) {
+                            console.error('�️ REAL TTS test failed:', error);
+                            Alert.alert('❌ Error', `Test failed: ${error}`);
+                        }
                     }
                 }
             ]
         );
+    };
+
+    // Test simple audio methods
+    const testSimpleAudio = async (): Promise<void> => {
+        try {
+            console.log('� Testing simple audio methods...');
+            
+            Alert.alert(
+                '🔊 Simple Audio Test',
+                'Testing basic audio generation and playback.\n\nThis will generate audio tones and play them.\n\nReady?',
+                [
+                    { text: 'Cancel' },
+                    { 
+                        text: 'Test Audio', 
+                        onPress: async () => {
+                            const success = await audioFileTTSService.speakThroughCall(
+                                'Testing audio generation',
+                                { language: 'en' }
+                            );
+                            
+                            Alert.alert(
+                                success ? '✅ Audio Test Success' : '❌ Audio Test Failed',
+                                success ? 
+                                    'Audio generation and playback working!' : 
+                                    'Audio test failed. Check console for details.',
+                                [{ text: 'OK' }]
+                            );
+                        }
+                    }
+                ]
+            );
+        } catch (error) {
+            Alert.alert(
+                '❌ Audio Test Error',
+                `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                [{ text: 'OK' }]
+            );
+        }
     };
 
     // Toggle translation (now handles both directions)
@@ -1661,13 +1841,17 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
                             <Text style={styles.testButtonText}>Test API</Text>
                         </TouchableOpacity>
 
-                        {/* Test TTS Button */}
-                        {textToSpeech.isSupported && (
-                            <TouchableOpacity style={[styles.testButton, { borderColor: '#FF9800', backgroundColor: '#fff3e0' }]} onPress={testDirectTTSInjection}>
-                                <MaterialIcons name="phone-in-talk" size={16} color="#FF9800" />
-                                <Text style={[styles.testButtonText, { color: '#FF9800' }]}>Test Direct TTS</Text>
-                            </TouchableOpacity>
-                        )}
+                        {/* Simple Audio Test Button */}
+                        <TouchableOpacity style={[styles.testButton, { borderColor: '#4CAF50', backgroundColor: '#e8f5e8' }]} onPress={testSimpleAudio}>
+                            <MaterialIcons name="audiotrack" size={16} color="#4CAF50" />
+                            <Text style={[styles.testButtonText, { color: '#4CAF50' }]}>Test Audio</Text>
+                        </TouchableOpacity>
+
+                        {/* Test REAL TTS Button */}
+                        <TouchableOpacity style={[styles.testButton, { borderColor: '#FF9800', backgroundColor: '#fff3e0' }]} onPress={testDirectTTSInjection}>
+                            <MaterialIcons name="record-voice-over" size={16} color="#FF9800" />
+                            <Text style={[styles.testButtonText, { color: '#FF9800' }]}>🗣️ Test Real TTS</Text>
+                        </TouchableOpacity>
 
                         {/* Text-to-Speech Toggle */}
                         {textToSpeech.isSupported && (
@@ -1930,7 +2114,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     scrollContentContainer: {
-        padding: 30,
+        padding: 20,
         alignItems: 'center',
         minHeight: '100%',
     },
@@ -1961,17 +2145,17 @@ const styles = StyleSheet.create({
     },
     statusText: {
         fontSize: 14,
-        color: '#34495e',
+        color: '#666',
     },
     duration: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#27ae60',
-        marginBottom: 20,
+        color: '#2c3e50',
+        marginBottom: 15,
     },
     userContainer: {
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 30,
     },
     userName: {
         fontSize: 18,
@@ -1983,15 +2167,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#7f8c8d',
         marginTop: 5,
-    },
-    languageSelectionContainer: {
-        backgroundColor: '#f8f9fa',
-        padding: 15,
-        borderRadius: 10,
-        width: '100%',
-        marginBottom: 15,
-        borderWidth: 1,
-        borderColor: '#e9ecef',
     },
     languageSelectionTitle: {
         fontSize: 16,
@@ -2068,29 +2243,6 @@ const styles = StyleSheet.create({
         color: '#2196F3',
         fontSize: 12,
         fontWeight: '600',
-    },
-    micStatusButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#fff3cd',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 15,
-        gap: 4,
-        borderWidth: 1,
-        borderColor: '#ffeaa7',
-    },
-    micStatusButtonActive: {
-        backgroundColor: '#d4edda',
-        borderColor: '#4CAF50',
-    },
-    micStatusText: {
-        color: '#856404',
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    micStatusTextActive: {
-        color: '#155724',
     },
     ttsButton: {
         flexDirection: 'row',
@@ -2274,30 +2426,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    successMessage: {
-        fontSize: 12,
-        color: '#27ae60',
-        textAlign: 'center',
-        marginTop: 10,
-        fontStyle: 'italic',
-    },
-    translationStatusContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 10,
-        padding: 8,
-        backgroundColor: '#f8f9fa',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#4CAF50',
-    },
-    translationStatusText: {
-        fontSize: 12,
-        color: '#4CAF50',
-        marginLeft: 5,
-        fontWeight: 'bold',
-    },
     videoContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -2312,43 +2440,6 @@ const styles = StyleSheet.create({
     remoteVideoContainer: {
         flexBasis: '48%',
         marginLeft: 5,
-    },
-    overlayUserContainer: {
-        position: 'absolute',
-        bottom: 10,
-        right: 10,
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        padding: 8,
-        borderRadius: 8,
-        alignItems: 'center',
-    },
-    overlayUserName: {
-        fontSize: 12,
-        marginTop: 4,
-    },
-    overlayUserStatus: {
-        fontSize: 10,
-        marginTop: 2,
-    },
-    activeTranslationsContainer: {
-        backgroundColor: '#e8f5e8',
-        padding: 12,
-        borderRadius: 8,
-        marginTop: 10,
-        borderWidth: 1,
-        borderColor: '#c8e6c9',
-    },
-    activeTranslationsTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#2e7d32',
-        marginBottom: 6,
-    },
-    activeTranslationItem: {
-        fontSize: 13,
-        color: '#388e3c',
-        marginBottom: 3,
-        paddingLeft: 8,
     },
 });
 

@@ -50,6 +50,7 @@ interface WorkingVoiceCallModalProps {
     currentUserId: string;
     targetUserId: string;
     targetUserName: string;
+    userType: 'customer' | 'agent'; // NEW: Distinguish between customer and agent
 }
 
 // Component state types
@@ -172,7 +173,8 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
     onClose, 
     currentUserId, 
     targetUserId, 
-    targetUserName 
+    targetUserName,
+    userType // NEW: Extract userType prop
 }) => {
     // Basic call states
     const [callStatus, setCallStatus] = useState<CallStatus>('connecting');
@@ -269,6 +271,46 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
         return AVAILABLE_LANGUAGES.find(lang => lang.code === languageExchange.myTargetLanguage);
     };
 
+    // NEW: Get correct speech recognition language based on user type
+    const getSpeechRecognitionLanguage = (): { speechLang: string, googleTranslateLang: string } => {
+        if (userType === 'agent') {
+            // Agent speaks in their language (agent's speaking language)
+            // For agents, they speak in customerToAgent.agentReceives language
+            const agentSpeakingLang = customerToAgent.agentReceives || 'en';
+            const speechLang = agentSpeakingLang === 'zh' ? 'zh-CN' : 
+                              agentSpeakingLang === 'fil' ? 'tl-PH' : 
+                              agentSpeakingLang + '-' + (agentSpeakingLang === 'en' ? 'US' : 
+                                                        agentSpeakingLang === 'es' ? 'ES' :
+                                                        agentSpeakingLang === 'hi' ? 'IN' :
+                                                        agentSpeakingLang === 'te' ? 'IN' :
+                                                        agentSpeakingLang === 'ta' ? 'IN' : 'US');
+            return { speechLang, googleTranslateLang: agentSpeakingLang };
+        } else {
+            // Customer speaks in their language (customer's speaking language)
+            // For customers, they speak in customerToAgent.customerSpeaking language
+            const customerSpeakingLang = customerToAgent.customerSpeaking || languageExchange.myLanguage || 'en';
+            const speechLang = customerSpeakingLang === 'zh' ? 'zh-CN' : 
+                              customerSpeakingLang === 'fil' ? 'tl-PH' : 
+                              customerSpeakingLang + '-' + (customerSpeakingLang === 'en' ? 'US' : 
+                                                           customerSpeakingLang === 'es' ? 'ES' :
+                                                           customerSpeakingLang === 'hi' ? 'IN' :
+                                                           customerSpeakingLang === 'te' ? 'IN' :
+                                                           customerSpeakingLang === 'ta' ? 'IN' : 'US');
+            return { speechLang, googleTranslateLang: customerSpeakingLang };
+        }
+    };
+
+    // NEW: Get correct translation target language based on user type  
+    const getTranslationTargetLanguage = (): string => {
+        if (userType === 'agent') {
+            // Agent speaks -> translate to customer's language
+            return customerToAgent.customerSpeaking || languageExchange.myTargetLanguage || 'hi';
+        } else {
+            // Customer speaks -> translate to agent's language
+            return customerToAgent.agentReceives || languageExchange.myTargetLanguage || 'en';
+        }
+    };
+
     // Translation function using Google Translate API
     const translateText = async (text: string, sourceLanguage: string, targetLanguage: string): Promise<TranslationResult> => {
         try {
@@ -348,36 +390,24 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
 
     // Process speech recognition result and translate (updated for bidirectional translation)
     const processTranslationAndShare = async (originalText: string, confidence: number): Promise<void> => {
-        // Determine which translation direction to use based on who is speaking (this user)
+        // NEW: Use userType prop to determine correct source and target languages
         let sourceLanguage: string;
         let targetLanguage: string;
         let translationDirection: string;
 
-        // Determine user type and appropriate translation direction
-        if (agentToCustomer.isEnabled && customerToAgent.isEnabled) {
-            // Both directions enabled - need to determine user type
-            // If both are enabled, this is likely the agent speaking
-            // Agent speaks their language and translates to customer's language
-            sourceLanguage = agentToCustomer.agentSpeaking;
-            targetLanguage = agentToCustomer.customerReceives;
+        // Determine translation direction based on actual user type
+        if (userType === 'agent') {
+            // Agent speaking -> translate to customer's language
+            sourceLanguage = customerToAgent.agentReceives || 'en'; // Agent speaks in their language
+            targetLanguage = customerToAgent.customerSpeaking || 'hi'; // Translate to customer's language
             translationDirection = 'Agent→Customer';
-            console.log('🎯 Both translations enabled - processing as agent speech');
-        } else if (agentToCustomer.isEnabled) {
-            // Only agent→customer enabled - this user is the agent
-            sourceLanguage = agentToCustomer.agentSpeaking;
-            targetLanguage = agentToCustomer.customerReceives;
-            translationDirection = 'Agent→Customer';
-        } else if (customerToAgent.isEnabled) {
-            // Only customer→agent enabled - this user is the customer
-            sourceLanguage = customerToAgent.customerSpeaking;
-            targetLanguage = customerToAgent.agentReceives;
-            translationDirection = 'Customer→Agent';
+            console.log(`🎯 AGENT speaking ${sourceLanguage} -> translating to customer's ${targetLanguage}`);
         } else {
-            // Fallback to old behavior for backward compatibility
-            sourceLanguage = languageExchange.myLanguage;
-            targetLanguage = languageExchange.myTargetLanguage;
-            translationDirection = 'Legacy';
-            console.log('⚠️ No specific translation direction enabled, using legacy mode');
+            // Customer speaking -> translate to agent's language
+            sourceLanguage = customerToAgent.customerSpeaking || languageExchange.myLanguage || 'hi'; // Customer speaks in their language
+            targetLanguage = customerToAgent.agentReceives || 'en'; // Translate to agent's language
+            translationDirection = 'Customer→Agent';
+            console.log(`🎯 CUSTOMER speaking ${sourceLanguage} -> translating to agent's ${targetLanguage}`);
         }
 
         if (!targetLanguage) {
@@ -417,11 +447,28 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
                 await shareTranslationMessage(translationMessage);
                 console.log(`✅ ${translationDirection} translation shared: "${translationMessage.translatedText}"`);
 
-                // Convert translated text to speech and transmit through call
-                if (textToSpeech.isEnabled && callStatus === 'connected') {
-                    console.log('🗣️ Auto-transmitting TTS for translation...');
-                    speakTranslatedTextForCallTransmission(translationResult.translatedText, targetLanguage);
+                // 🚀 AUTOMATIC TTS TRANSMISSION - Send TTS immediately after successful translation!
+                console.log('🗣️ 🚀 AUTO-TTS: Sending translation audio immediately...');
+                console.log(`🗣️ Text: "${translationResult.translatedText}" → Language: ${targetLanguage}`);
+                console.log(`🗣️ UserType: ${userType.toUpperCase()} | Direction: ${translationDirection}`);
+                
+                // 🔍 DEBUG: Agent-specific TTS troubleshooting
+                if (userType === 'agent') {
+                    console.log('🛠️ AGENT TTS DEBUG:');
+                    console.log(`   - Agent speaking language: ${sourceLanguage}`);
+                    console.log(`   - Target language for TTS: ${targetLanguage}`);
+                    console.log(`   - customerToAgent config:`, customerToAgent);
+                    console.log(`   - Translation result:`, translationResult);
                 }
+                
+                // Fire and forget - don't wait, let speech recognition continue
+                speakTranslatedTextForCallTransmission(translationResult.translatedText, targetLanguage)
+                    .then(() => {
+                        console.log(`🗣️ ✅ ${userType.toUpperCase()} Auto TTS transmission completed successfully`);
+                    })
+                    .catch((error) => {
+                        console.error(`🗣️ ❌ ${userType.toUpperCase()} Auto TTS transmission failed:`, error);
+                    });
             }
         } catch (error) {
             console.error(`❌ ${translationDirection} translation process failed:`, error);
@@ -543,14 +590,12 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.maxAlternatives = 1;
-            // Use the selected language directly (already in correct format)
-            recognition.lang = languageExchange.myLanguage === 'zh' ? 'zh-CN' : 
-                              languageExchange.myLanguage === 'fil' ? 'tl-PH' : 
-                              languageExchange.myLanguage + '-' + (languageExchange.myLanguage === 'en' ? 'US' : 
-                                                                  languageExchange.myLanguage === 'es' ? 'ES' :
-                                                                  languageExchange.myLanguage === 'hi' ? 'IN' :
-                                                                  languageExchange.myLanguage === 'te' ? 'IN' :
-                                                                  languageExchange.myLanguage === 'ta' ? 'IN' : 'US');
+            
+            // NEW: Use correct language based on user type
+            const { speechLang, googleTranslateLang } = getSpeechRecognitionLanguage();
+            recognition.lang = speechLang;
+            
+            console.log(`🎤 ${userType.toUpperCase()}: Setting speech recognition to ${speechLang} (Google Translate: ${googleTranslateLang})`);
 
             recognition.onresult = (event: any) => {
                 let interimTranscript = '';
@@ -682,43 +727,12 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
     const startSpeechRecognition = (): void => {
         if (speechRecognitionRef.current && !speechRecognition.isListening) {
             try {
-                // Determine which language to listen for based on who is speaking (this user)
-                let listeningLanguage = languageExchange.myLanguage; // fallback
+                // NEW: Use userType prop to determine correct language
+                const { speechLang, googleTranslateLang } = getSpeechRecognitionLanguage();
                 
-                // Determine if current user is customer or agent based on translation settings
-                // Agent users typically have agentToCustomer enabled for their own speech
-                // Customer users typically have customerToAgent enabled for their own speech
-                
-                if (agentToCustomer.isEnabled && customerToAgent.isEnabled) {
-                    // Both directions enabled - need to determine user type
-                    // If both are enabled, prioritize the agent's language (agentSpeaking)
-                    // since agents typically control both translation directions
-                    listeningLanguage = agentToCustomer.agentSpeaking;
-                    console.log(`🎯 Both translations enabled - listening for agent language: ${listeningLanguage}`);
-                } else if (agentToCustomer.isEnabled) {
-                    // Only agent→customer enabled - this user is the agent
-                    listeningLanguage = agentToCustomer.agentSpeaking;
-                    console.log(`🎯 Agent mode - listening for agent language: ${listeningLanguage}`);
-                } else if (customerToAgent.isEnabled) {
-                    // Only customer→agent enabled - this user is the customer
-                    listeningLanguage = customerToAgent.customerSpeaking;
-                    console.log(`🎯 Customer mode - listening for customer language: ${listeningLanguage}`);
-                } else {
-                    // Fallback to legacy mode
-                    console.log(`🎯 Legacy mode - listening for: ${listeningLanguage}`);
-                }
-
-                // Set the correct language for speech recognition
-                const speechLang = listeningLanguage === 'zh' ? 'zh-CN' : 
-                                  listeningLanguage === 'fil' ? 'tl-PH' : 
-                                  listeningLanguage + '-' + (listeningLanguage === 'en' ? 'US' : 
-                                                             listeningLanguage === 'es' ? 'ES' :
-                                                             listeningLanguage === 'hi' ? 'IN' :
-                                                             listeningLanguage === 'te' ? 'IN' :
-                                                             listeningLanguage === 'ta' ? 'IN' : 'US');
                 speechRecognitionRef.current.lang = speechLang;
                 speechRecognitionRef.current.start();
-                console.log(`🎤 Starting speech recognition in ${speechLang} (Google Translate: ${listeningLanguage})`);
+                console.log(`🎤 Starting speech recognition as ${userType.toUpperCase()} in ${speechLang} (Google Translate: ${googleTranslateLang})`);
             } catch (error) {
                 console.error('🎤 Failed to start speech recognition:', error);
                 // If it fails, try again after a delay
@@ -829,6 +843,17 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
         if (!text.trim()) {
             console.log('🗣️ TTS skipped - empty text');
             return;
+        }
+
+        console.log(`🗣️ SIMPLE TTS: Speaking "${text}" in ${targetLanguage} for ${userType.toUpperCase()}`);
+        
+        // Enhanced debugging for agent issues
+        if (userType === 'agent') {
+            console.log('AGENT TTS DETAILED DEBUG:');
+            console.log(`   - Target language: ${targetLanguage}`);
+            console.log(`   - Text to speak: "${text}"`);
+            console.log(`   - Current customerToAgent config:`, customerToAgent);
+            console.log(`   - TTS state:`, textToSpeech);
         }
 
         console.log(`🗣️ � SIMPLE TTS: Speaking "${text}" in ${targetLanguage}`);
@@ -985,18 +1010,9 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
         } catch (error) {
             console.error('🗣️ ❌ Alternative TTS failed:', error);
             
-            // Fallback to local TTS
-            Alert.alert(
-                'TTS Transmission Failed', 
-                `Could not transmit speech through call: ${error instanceof Error ? error.message : 'Unknown error'}\n\nFalling back to local speaker playback.`,
-                [
-                    { text: 'OK' },
-                    { 
-                        text: 'Play Locally', 
-                        onPress: () => speakTranslatedText(text, targetLanguage) 
-                    }
-                ]
-            );
+            // 🚫 NO LOCAL FALLBACK - Only transmit through call, no local playback
+            console.log('🚫 TTS transmission failed - NO local fallback will be played');
+            console.log('🔧 TTS should only transmit through call, not play locally');
         } finally {
             setTextToSpeech(prev => ({ ...prev, isSpeaking: false }));
         }
@@ -1020,6 +1036,10 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
         }
     };
     const speakTranslatedText = (text: string, targetLanguage: string): void => {
+        console.log('🚨 LOCAL TTS TRIGGERED - This should not happen for automatic translations!');
+        console.log(`🚨 Called for userType: ${userType}, text: "${text}", language: ${targetLanguage}`);
+        console.trace('🚨 Call stack trace:');
+        
         if (!textToSpeech.isSupported || !textToSpeech.isEnabled || !text.trim()) {
             console.log('🗣️ TTS skipped - not supported, disabled, or empty text');
             return;

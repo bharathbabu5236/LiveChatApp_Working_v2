@@ -632,6 +632,7 @@ const getLanguagePlaceholder = (language) => {
                 currentUserId={currentAgentId}
                 targetUserId={customerId}
                 targetUserName={`Customer ${customerId?.substring(0, 8)}...`}
+                userType="agent"
             />
         </View>
     );

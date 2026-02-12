@@ -1091,6 +1091,7 @@ const ChatPopup = ({ visible, onClose, onAgentSelect }) => {
                     currentUserId={userId}
                     targetUserId={agentId || (selectedDepartment === 'doctor' ? AGENT_DOCTOR_UID : AGENT_PAYMENTS_UID)}
                     targetUserName={selectedDepartment === 'doctor' ? 'Doctor' : 'Payments Agent'}
+                    userType="customer"
                 />
                     </View>
                 </View>

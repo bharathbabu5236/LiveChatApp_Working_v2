@@ -868,61 +868,73 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
             let success = false;
             
             try {
-                // Use server TTS service we already set up
-                console.log('🌐 Making request to server TTS...');
-                const serverResult = await fetch('http://localhost:3001/api/tts', {
+                // ⚡ STEP 1: Try AZURE VOICE LIVE (Single API - Real-time Speech-to-Speech)
+                console.log('🚀 Trying Azure Voice Live (Real-time Speech-to-Speech)...');
+                
+                const azureLanguageCode = targetLanguage === 'zh' ? 'zh' : 
+                                         targetLanguage === 'fil' ? 'fil' : 
+                                         targetLanguage === 'en' ? 'en' : 
+                                         targetLanguage === 'hi' ? 'hi' :
+                                         targetLanguage === 'te' ? 'te' :
+                                         targetLanguage === 'ta' ? 'ta' :
+                                         targetLanguage;
+                
+                const voiceLiveResult = await fetch('http://localhost:3003/api/azure-voice-live', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        text: text,
-                        languageCode: targetLanguage === 'zh' ? 'zh-CN' : 
-                                     targetLanguage === 'fil' ? 'fil-PH' : 
-                                     targetLanguage === 'en' ? 'en-US' : `${targetLanguage}`,
-                        audioEncoding: 'MP3'
-                        // Don't send voiceName, let Google pick the best voice
+                        text: text,  // Using text input for now
+                        sourceLanguage: 'en',  // Source language 
+                        targetLanguage: azureLanguageCode,  // Target language
+                        outputFormat: 'mp3'
                     })
                 });
 
-                console.log('🌐 Server response status:', serverResult.status, serverResult.statusText);
-
-                if (serverResult.ok) {
-                    console.log('🌐 Server responded successfully');
-                    const audioBlob = await serverResult.blob();
-                    console.log('🌐 Server TTS audio blob received:', audioBlob.size, 'bytes');
+                if (voiceLiveResult.ok) {
+                    console.log('🚀 Azure Voice Live responded successfully');
+                    const audioBlob = await voiceLiveResult.blob();
+                    console.log('🚀 Voice Live audio received:', audioBlob.size, 'bytes');
                     
-                    // Convert blob to audio stream and inject
+                    // Get performance metrics
+                    const latency = voiceLiveResult.headers.get('X-Latency');
+                    const method = voiceLiveResult.headers.get('X-Method');
+                    const originalText = voiceLiveResult.headers.get('X-Original-Text');
+                    const translatedText = voiceLiveResult.headers.get('X-Translated-Text');
+                    const voiceUsed = voiceLiveResult.headers.get('X-Voice-Used');
+                    
+                    console.log(`🚀 Voice Live Performance: ${latency}ms (${method})`);
+                    console.log(`🚀 Translation: "${originalText}" → "${translatedText}" (${voiceUsed})`);
+                    
+                    // Play the neural voice audio
                     const audioUrl = URL.createObjectURL(audioBlob);
-                    console.log('🌐 Created blob URL:', audioUrl);
                     const audioElement = document.createElement('audio');
                     audioElement.src = audioUrl;
                     audioElement.crossOrigin = 'anonymous';
                     
                     await new Promise((resolve, reject) => {
                         audioElement.oncanplaythrough = () => {
-                            console.log('🌐 Audio can play through');
-                            resolve();
+                            console.log('🚀 Azure Voice Live audio ready');
+                            resolve(undefined);
                         };
                         audioElement.onerror = (error) => {
-                            console.error('🌐 Audio element error:', error);
+                            console.error('🚀 Azure Voice Live audio error:', error);
                             reject(error);
                         };
                         audioElement.load();
                     });
 
-                    console.log('🌐 Creating audio context...');
                     const audioContext = new AudioContext();
                     const source = audioContext.createMediaElementSource(audioElement);
                     const gainNode = audioContext.createGain();
-                    gainNode.gain.value = 2.0; // Boost for headphones
+                    gainNode.gain.value = 2.5; // Boost for neural voice clarity
                     
                     const destination = audioContext.createMediaStreamDestination();
                     source.connect(gainNode);
                     gainNode.connect(destination);
                     
-                    console.log('🌐 Starting audio playback...');
+                    console.log('🚀 Starting Azure Voice Live neural voice playback...');
                     audioElement.play();
                     
-                    console.log('🌐 Injecting audio stream...');
                     success = await workingVoiceCallService.injectCustomAudio(destination.stream);
                     
                     // Cleanup
@@ -930,13 +942,146 @@ const WorkingVoiceCallModal: FC<WorkingVoiceCallModalProps> = ({
                         URL.revokeObjectURL(audioUrl);
                         audioElement.remove();
                     }, 5000);
+                    
+                    if (success) {
+                        console.log('🚀✅ Azure Voice Live (Neural Voice) transmitted successfully!');
+                        console.log(`🚀⚡ Performance: ${latency}ms latency with ${voiceUsed}`);
+                    }
                 } else {
-                    console.error('🌐 Server TTS request failed:', serverResult.status, serverResult.statusText);
-                    const errorText = await serverResult.text();
-                    console.error('🌐 Server error details:', errorText);
+                    console.log('🚀 Azure Voice Live failed, trying fallback approaches...');
+                    
+                    // ✅ STEP 2: Fallback to Azure TTS (Multi-step approach)
+                    console.log('🌐 Fallback: Trying Azure TTS (Multi-step)...');
+                    const azureTTSLangCode = targetLanguage === 'zh' ? 'zh-CN' : 
+                                             targetLanguage === 'fil' ? 'fil-PH' : 
+                                             targetLanguage === 'en' ? 'en-US' : 
+                                             targetLanguage === 'hi' ? 'hi-IN' :
+                                             targetLanguage === 'te' ? 'te-IN' :
+                                             targetLanguage === 'ta' ? 'ta-IN' :
+                                             `${targetLanguage}-${targetLanguage.toUpperCase()}`;
+                    
+                    const azureResult = await fetch('http://localhost:3002/api/azure-tts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text: text,
+                            languageCode: azureTTSLangCode,
+                            audioEncoding: 'MP3'
+                        })
+                    });
+
+                    if (azureResult.ok) {
+                        console.log('🌐 Azure TTS responded successfully');
+                        const audioBlob = await azureResult.blob();
+                        console.log('🌐 Azure TTS audio blob received:', audioBlob.size, 'bytes');
+                        
+                        // Convert blob to audio stream and inject
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        const audioElement = document.createElement('audio');
+                        audioElement.src = audioUrl;
+                        audioElement.crossOrigin = 'anonymous';
+                        
+                        await new Promise((resolve, reject) => {
+                            audioElement.oncanplaythrough = () => {
+                                console.log('🌐 Azure TTS audio can play through');
+                                resolve(undefined);
+                            };
+                            audioElement.onerror = (error) => {
+                                console.error('🌐 Azure TTS audio element error:', error);
+                                reject(error);
+                            };
+                            audioElement.load();
+                        });
+
+                        const audioContext = new AudioContext();
+                        const source = audioContext.createMediaElementSource(audioElement);
+                        const gainNode = audioContext.createGain();
+                        gainNode.gain.value = 2.0;
+                        
+                        const destination = audioContext.createMediaStreamDestination();
+                        source.connect(gainNode);
+                        gainNode.connect(destination);
+                        
+                        audioElement.play();
+                        success = await workingVoiceCallService.injectCustomAudio(destination.stream);
+                        
+                        // Cleanup
+                        setTimeout(() => {
+                            URL.revokeObjectURL(audioUrl);
+                            audioElement.remove();
+                        }, 5000);
+                    }
+                }
+                    
+                    // Fallback to Google Cloud TTS
+                    const serverResult = await fetch('http://localhost:3001/api/tts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text: text,
+                            languageCode: targetLanguage === 'zh' ? 'zh-CN' : 
+                                         targetLanguage === 'fil' ? 'fil-PH' : 
+                                         targetLanguage === 'en' ? 'en-US' : `${targetLanguage}`,
+                            audioEncoding: 'MP3'
+                            // Don't send voiceName, let Google pick the best voice
+                        })
+                    });
+
+                    console.log('🌐 Google response status:', serverResult.status, serverResult.statusText);
+
+                    if (serverResult.ok) {
+                        console.log('🌐 Google TTS responded successfully');
+                        const audioBlob = await serverResult.blob();
+                        console.log('🌐 Google TTS audio blob received:', audioBlob.size, 'bytes');
+                        
+                        // Convert blob to audio stream and inject
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        console.log('🌐 Created Google blob URL:', audioUrl);
+                        const audioElement = document.createElement('audio');
+                        audioElement.src = audioUrl;
+                        audioElement.crossOrigin = 'anonymous';
+                        
+                        await new Promise((resolve, reject) => {
+                            audioElement.oncanplaythrough = () => {
+                                console.log('🌐 Google audio can play through');
+                                resolve(undefined);
+                            };
+                            audioElement.onerror = (error) => {
+                                console.error('🌐 Google audio element error:', error);
+                                reject(error);
+                            };
+                            audioElement.load();
+                        });
+
+                        console.log('🌐 Creating Google audio context...');
+                        const audioContext = new AudioContext();
+                        const source = audioContext.createMediaElementSource(audioElement);
+                        const gainNode = audioContext.createGain();
+                        gainNode.gain.value = 2.0; // Boost for headphones
+                        
+                        const destination = audioContext.createMediaStreamDestination();
+                        source.connect(gainNode);
+                        gainNode.connect(destination);
+                        
+                        console.log('🌐 Starting Google audio playback...');
+                        audioElement.play();
+                        
+                        console.log('🌐 Injecting Google audio stream...');
+                        success = await workingVoiceCallService.injectCustomAudio(destination.stream);
+                        
+                        // Cleanup
+                        setTimeout(() => {
+                            URL.revokeObjectURL(audioUrl);
+                            audioElement.remove();
+                        }, 5000);
+                    } else {
+                        console.error('🌐 Google TTS request failed:', serverResult.status, serverResult.statusText);
+                        const errorText = await serverResult.text();
+                        console.error('🌐 Google error details:', errorText);
+                    }
                 }
             } catch (serverError) {
-                console.error('🌐 Server TTS network error:', serverError);
+                console.error('🌐 TTS network error:', serverError);
             }
 
             if (!success) {
